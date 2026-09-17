@@ -24,6 +24,7 @@ export default defineConfig({
           react: ['react', 'react-dom', 'react-router-dom'],
           charts: ['recharts'],
           pdf: ['jspdf', 'jspdf-autotable'],
+          three: ['three'],
           supabase: ['@supabase/supabase-js'],
         },
       },

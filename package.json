@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "AMD test-before-release water system \u2014 operations dashboard, device API, firmware and simulator",
+  "description": "AMD test-before-release water system — operations dashboard, device API, firmware and simulator",
   "scripts": {
     "dev": "vite",
     "build": "npm run sync:shared -- --check && tsc --noEmit && vite build",
@@ -19,6 +19,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "@tanstack/react-query": "^5.59.0",
+    "@types/three": "^0.186.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
@@ -31,6 +32,7 @@
     "react-router-dom": "^6.26.2",
     "recharts": "^2.12.7",
     "tailwind-merge": "^2.5.2",
+    "three": "^0.186.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

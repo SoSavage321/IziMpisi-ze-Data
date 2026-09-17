@@ -81,7 +81,7 @@ flowchart LR
   CONTROLS -->|writes a REQUEST| COM
 
   SIM[Simulator<br/>N virtual devices] -.same API.-> ING
-  SHARED[/shared/controller.ts<br/>78 unit tests/] -.ported to.-> CTRL
+  SHARED[/shared/controller.ts<br/>79 unit tests/] -.ported to.-> CTRL
   SHARED --> SIM
 ```
 
@@ -104,7 +104,7 @@ devices run live, and commands you send are genuinely validated against the inte
 any of the demo accounts shown on the login page (password `demo1234`).
 
 ```bash
-npm test          # 78 unit tests: state machine, interlocks, alarm rules, report maths
+npm test          # 79 unit tests: state machine, interlocks, alarm rules, report maths
 npm run build     # typecheck, verify the vendored copies, production build
 npm run sim       # the device simulator, printing to the terminal
 ```
@@ -122,11 +122,45 @@ npm run sim       # the device simulator, printing to the terminal
 | `supabase/migrations/` | Schema, RLS, triggers, views, retention |
 | `supabase/functions/` | `ingest`, `commands`, `escalate`, `register-device` |
 | `scripts/seed.ts` | Demo org, sites, devices, users and seven days of history |
+| `src/components/plant3d.tsx` | The 3D digital twin of the plant (three.js), lazy-loaded |
 | `dashboard/index.html` | The original standalone bench demo, kept for the Tinkercad rig |
 
 `shared/` is vendored into `supabase/functions/_shared/lib/` by `npm run sync:shared`, because the
 Supabase CLI only bundles files under `supabase/functions`. `npm run build` fails if the copies are
 stale, so the two cannot drift.
+
+---
+
+## The 3D twin
+
+The live view renders the plant either as a schematic or as a **3D model** (the toggle sits next to the
+status lights). The 3D view is a genuine twin rather than an illustration: water levels follow the
+reported litres, water colour follows measured quality, valves light by real state including V3's
+interlock, and flow animates only along a pipe that is actually carrying water.
+
+**Connecting it to the physical prototype requires no change to the 3D code.** Both renderings consume
+one `plantView` object built in `src/pages/SiteLive.tsx` from the data layer:
+
+```
+device + telemetry  ──>  plantView  ──┬──>  <ProcessDiagram />   (SVG schematic)
+   (demo sim today,                   └──>  <Plant3D />          (three.js twin)
+    ESP32 /ingest tomorrow)
+```
+
+So the wiring order for the rig is simply: flash the firmware with a device key → it posts telemetry
+to `/ingest` → `useTelemetry` returns real rows → both views follow the real tanks. The fields the twin
+needs (`chamber_l`, `tank_l`, `tank_cap_l`, `tank_ph`, `ph`, `tds`, `neutraliser_pct`, `v1`/`v2`/`v3`,
+`sump_pump`, `dosing_pump`) are already in the telemetry payload the firmware sends.
+
+three.js is in its own lazy chunk (~530 kB) and is only downloaded when somebody opens the 3D view.
+The render loop pauses when the tab is hidden or the canvas is scrolled off screen, and honours
+`prefers-reduced-motion`.
+
+### Matching the twin to your rig
+
+The vessel proportions in `plant3d.tsx` are the prototype's, not scaled metres. When the real rig is
+built, adjust `CHAMBER_H`, `TANK_H`, `DRUM_H` and the vessel radii in `buildScene()` to match — levels
+are driven by the *fraction* of capacity, so the numbers stay correct whatever the geometry.
 
 ---
 

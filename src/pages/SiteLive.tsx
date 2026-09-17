@@ -1,18 +1,40 @@
+import { Suspense, lazy, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Lock, SlidersHorizontal, Wifi, WifiOff } from 'lucide-react';
+import { Box, Lock, Share2, SlidersHorizontal, Wifi, WifiOff } from 'lucide-react';
 import {
   useBatches, useConfigs, useDevice, useEvents, useTelemetry, useV3Lock,
 } from '../hooks/data.ts';
 import { ago, litres, num, pct, ph as fmtPh, siteTime, zoneLabel } from '../lib/format.ts';
 import { Badge, Button, Card, CardHead, ErrorNote, Spinner, cn, stateTone } from '../components/ui.tsx';
 import { Meter, PhBand, ProcessDiagram, StatusLights } from '../components/plant.tsx';
+/**
+ * three.js is about 600 kB. An operator who prefers the schematic, or who is
+ * on a phone on site, should never download it. It arrives only when the 3D
+ * view is actually asked for.
+ */
+const Plant3D = lazy(() =>
+  import('../components/plant3d.tsx').then((m) => ({ default: m.Plant3D })));
+
+/** Remembered per viewer; a convenience, never state anything depends on. */
+function useViewMode() {
+  const [mode, setMode] = useState<'3d' | 'schematic'>(() => {
+    try { return (localStorage.getItem('waterguard.plantview') as '3d' | 'schematic') ?? '3d'; }
+    catch { return '3d'; }
+  });
+  const set = (next: '3d' | 'schematic') => {
+    setMode(next);
+    try { localStorage.setItem('waterguard.plantview', next); } catch { /* private window */ }
+  };
+  return [mode, set] as const;
+}
 
 export default function SiteLive() {
   const { deviceId } = useParams();
+  const [viewMode, setViewMode] = useViewMode();
   const { data: device, isLoading, error } = useDevice(deviceId);
   const { data: telemetry } = useTelemetry(deviceId, 20);
   const { data: batches } = useBatches({ deviceId, limit: 60 });
@@ -54,6 +76,28 @@ export default function SiteLive() {
   const stableWindow = Number(config?.stable_window_s ?? 3);
   const inState = secondsInState(telemetry ?? [], device.state);
 
+  /**
+   * One description of the plant, rendered two ways. When the physical
+   * prototype starts posting to /ingest, this object carries its real
+   * telemetry and both views follow the real tanks unchanged.
+   */
+  const plantView = {
+    state: device.state ?? 'UNKNOWN',
+    chamberL: Number(latest?.chamber_l ?? 0),
+    batchL: Number(config?.batch_l ?? 100),
+    tankL: Number(latest?.tank_l ?? device.tank_l ?? 0),
+    tankCapL: Number(latest?.tank_cap_l ?? device.tank_cap_l ?? 300),
+    tankPh: latest ? Number(latest.tank_ph) : null,
+    ph: device.ph === null ? null : Number(device.ph),
+    tds: device.tds === null ? null : Number(device.tds),
+    v1: Boolean(device.v1), v2: Boolean(device.v2), v3: Boolean(device.v3),
+    sumpPump: Boolean(latest?.sump_pump),
+    dosingPump: Boolean(latest?.dosing_pump),
+    neutraliserPct: device.neutraliser_pct === null ? null : Number(device.neutraliser_pct),
+    offline: device.offline,
+    v3LockReason: v3Lock ?? null,
+  };
+
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -89,27 +133,42 @@ export default function SiteLive() {
         <CardHead
           title="Process"
           hint={`Pass band pH ${limits.phMin}–${limits.phMax} · TDS ≤ ${num(limits.tdsMax)} mg/L`}
-          right={<StatusLights led={device.led} siren={Boolean(device.siren)} />}
+          right={
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <StatusLights led={device.led} siren={Boolean(device.siren)} />
+              <div className="flex rounded-lg border border-line p-0.5" role="group" aria-label="Plant view">
+                <button
+                  onClick={() => setViewMode('3d')}
+                  aria-pressed={viewMode === '3d'}
+                  className={cn('inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs',
+                    viewMode === '3d' ? 'bg-raised font-medium text-ink' : 'text-muted hover:text-ink')}
+                >
+                  <Box className="h-3.5 w-3.5" /> 3D
+                </button>
+                <button
+                  onClick={() => setViewMode('schematic')}
+                  aria-pressed={viewMode === 'schematic'}
+                  className={cn('inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs',
+                    viewMode === 'schematic' ? 'bg-raised font-medium text-ink' : 'text-muted hover:text-ink')}
+                >
+                  <Share2 className="h-3.5 w-3.5" /> Schematic
+                </button>
+              </div>
+            </div>
+          }
         />
-        <ProcessDiagram
-          limits={limits}
-          v={{
-            state: device.state ?? 'UNKNOWN',
-            chamberL: Number(latest?.chamber_l ?? 0),
-            batchL: Number(config?.batch_l ?? 100),
-            tankL: Number(latest?.tank_l ?? device.tank_l ?? 0),
-            tankCapL: Number(latest?.tank_cap_l ?? device.tank_cap_l ?? 300),
-            tankPh: latest ? Number(latest.tank_ph) : null,
-            ph: device.ph === null ? null : Number(device.ph),
-            tds: device.tds === null ? null : Number(device.tds),
-            v1: Boolean(device.v1), v2: Boolean(device.v2), v3: Boolean(device.v3),
-            sumpPump: Boolean(latest?.sump_pump),
-            dosingPump: Boolean(latest?.dosing_pump),
-            neutraliserPct: device.neutraliser_pct === null ? null : Number(device.neutraliser_pct),
-            offline: device.offline,
-            v3LockReason: v3Lock ?? null,
-          }}
-        />
+
+        {viewMode === '3d' ? (
+          <Suspense fallback={
+            <div className="flex h-[320px] items-center justify-center rounded-xl border border-line bg-raised sm:h-[420px]">
+              <Spinner label="Loading the 3D view" />
+            </div>
+          }>
+            <Plant3D v={plantView} limits={limits} deviceName={device.device_name} />
+          </Suspense>
+        ) : (
+          <ProcessDiagram limits={limits} v={plantView} />
+        )}
 
         {/* progress bars for the two timed windows */}
         {device.state === 'TEST' ? (

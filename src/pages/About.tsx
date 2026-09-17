@@ -6,7 +6,7 @@
  * somebody downstream will assume it was covered.
  */
 
-import { CheckCircle2, CircleDashed, Lock, ShieldCheck } from 'lucide-react';
+import { Box, CheckCircle2, CircleDashed, Lock, ShieldCheck } from 'lucide-react';
 import { Badge, Card, CardHead } from '../components/ui.tsx';
 
 const STEPS = [
@@ -118,6 +118,33 @@ export default function About() {
             </li>
           ))}
         </ul>
+      </Card>
+
+      <Card>
+        <CardHead title="The 3D view" hint="A digital twin of the rig, not an illustration" />
+        <div className="flex gap-3">
+          <Box className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden />
+          <div className="space-y-2 text-sm text-ink-2">
+            <p>
+              The live view can be shown as a 3D model of the plant instead of the schematic. It is not a
+              drawing that happens to look like the rig: it is a second rendering of the same live state.
+              Water levels in the check chamber and the treatment tank follow the reported litres, the water
+              takes its colour from the measured quality, valves light by their real state including V3&apos;s
+              interlock, and flow only animates along a pipe that is actually carrying water.
+            </p>
+            <p>
+              <span className="font-medium text-ink">Connecting it to the prototype takes no work.</span>{' '}
+              Both views read one object built from whatever the data layer returns. Today that is the
+              in-browser simulation. The moment the ESP32 starts posting to <span className="font-mono">/ingest</span>,
+              the same object carries its real telemetry and the tanks on screen follow the tanks on the bench.
+            </p>
+            <p className="text-muted">
+              Drag to orbit, scroll to zoom. It pauses when the tab is hidden or it is scrolled out of view,
+              and it is only downloaded when you open it — an operator who stays on the schematic never pays
+              for it.
+            </p>
+          </div>
+        </div>
       </Card>
 
       <Card>
