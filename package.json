@@ -3,17 +3,18 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "AMD test-before-release water system — operations dashboard, device API, firmware and simulator",
+  "description": "AMD test-before-release water system \u2014 operations dashboard, device API, firmware and simulator",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run sync:shared -- --check && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false",
-    "lint": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
-    "sim": "tsx simulator/index.ts"
+    "sim": "tsx simulator/index.ts",
+    "sync:shared": "node scripts/sync-shared.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

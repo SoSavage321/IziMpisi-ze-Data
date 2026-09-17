@@ -1,3 +1,7 @@
+// GENERATED FILE — do not edit.
+// Copied from /shared by scripts/sync-shared.mjs. Edit the original and run
+// `npm run sync:shared`.
+
 /**
  * WaterGuard controller — the batch test-before-release state machine.
  *

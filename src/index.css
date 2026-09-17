@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Industrial theme. Every colour is a token so the two themes swap in one
+  place, and status colours are always paired with an icon and a word.
+*/
+:root {
+  color-scheme: light;
+  --bg: 229 235 232;
+  --surface: 253 254 253;
+  --raised: 241 245 243;
+  --line: 220 228 225;
+  --ink: 7 26 24;
+  --ink-2: 71 88 85;
+  --muted: 122 138 134;
+  --accent: 13 95 87;
+  --good: 12 163 12;
+  --warn: 250 178 25;
+  --serious: 236 131 90;
+  --crit: 208 59 59;
+  --info: 42 120 214;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: 7 13 12;
+  --surface: 17 26 25;
+  --raised: 24 34 33;
+  --line: 31 43 41;
+  --ink: 238 245 243;
+  --ink-2: 173 188 184;
+  --muted: 127 143 139;
+  --accent: 63 201 173;
+  --good: 12 163 12;
+  --warn: 250 178 25;
+  --serious: 236 131 90;
+  --crit: 208 59 59;
+  --info: 57 135 229;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: 7 13 12;
+    --surface: 17 26 25;
+    --raised: 24 34 33;
+    --line: 31 43 41;
+    --ink: 238 245 243;
+    --ink-2: 173 188 184;
+    --muted: 127 143 139;
+    --accent: 63 201 173;
+    --info: 57 135 229;
+  }
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Touch targets: operators use this on a phone, outdoors, wearing gloves. */
+button, a, [role="button"], input, select { min-height: 40px; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

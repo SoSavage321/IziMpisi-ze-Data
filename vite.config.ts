@@ -12,7 +12,23 @@ export default defineConfig({
     },
   },
   server: { port: 5173, host: true },
-  build: { outDir: 'dist', sourcemap: true },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Operators open this on a phone on a mine site. Split the heavy
+        // libraries out so the shell and the live view load first and the
+        // report generator is only fetched when somebody builds a report.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          charts: ['recharts'],
+          pdf: ['jspdf', 'jspdf-autotable'],
+          supabase: ['@supabase/supabase-js'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'node',
     include: ['shared/**/*.test.ts', 'src/**/*.test.ts'],
