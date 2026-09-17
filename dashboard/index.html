@@ -1,0 +1,999 @@
+<title>WaterGuard Discharge Control</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --plane:      #e9eeec;
+    --surface:    #fbfcfc;
+    --surface-2:  #f2f5f4;
+    --ink:        #0d1413;
+    --ink-2:      #4d5956;
+    --muted:      #7c8885;
+    --line:       #dde3e1;
+    --rule:       #c7d0cd;
+    --accent:     #0b6a5f;
+    --accent-ink: #08544b;
+    --good:       #0ca30c;
+    --warning:    #fab219;
+    --serious:    #ec835a;
+    --critical:   #d03b3b;
+    --series-ph:  #2a78d6;
+    --band:       rgba(12,163,12,0.10);
+    --shadow:     0 1px 2px rgba(13,20,19,0.06);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:      #0b100f;
+      --surface:    #161c1b;
+      --surface-2:  #1e2523;
+      --ink:        #f1f5f4;
+      --ink-2:      #b4bfbc;
+      --muted:      #879391;
+      --line:       #262e2c;
+      --rule:       #333c3a;
+      --accent:     #35b9a3;
+      --accent-ink: #66d3c0;
+      --good:       #0ca30c;
+      --warning:    #fab219;
+      --serious:    #ec835a;
+      --critical:   #d03b3b;
+      --series-ph:  #3987e5;
+      --band:       rgba(12,163,12,0.16);
+      --shadow:     0 1px 2px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:      #0b100f;
+    --surface:    #161c1b;
+    --surface-2:  #1e2523;
+    --ink:        #f1f5f4;
+    --ink-2:      #b4bfbc;
+    --muted:      #879391;
+    --line:       #262e2c;
+    --rule:       #333c3a;
+    --accent:     #35b9a3;
+    --accent-ink: #66d3c0;
+    --good:       #0ca30c;
+    --warning:    #fab219;
+    --serious:    #ec835a;
+    --critical:   #d03b3b;
+    --series-ph:  #3987e5;
+    --band:       rgba(12,163,12,0.16);
+    --shadow:     0 1px 2px rgba(0,0,0,0.4);
+  }
+
+  body {
+    margin: 0;
+    background: var(--plane);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+
+  /* ---------- masthead ---------- */
+  .mast {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+    background: var(--plane);
+    border-bottom: 1px solid var(--rule);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px;
+    padding-block: 12px;
+  }
+  .mast h1 {
+    font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .01em;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .mast h1 .plant { color: var(--muted); font-weight: 500; }
+  .mast .spacer { flex: 1 1 auto; }
+  .clock { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    padding: 5px 11px 5px 9px; border-radius: 999px;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pill[data-tone="good"]     { border-color: color-mix(in srgb, var(--good) 45%, var(--rule)); }
+  .pill[data-tone="good"] .dot     { background: var(--good); }
+  .pill[data-tone="warning"]  { border-color: color-mix(in srgb, var(--warning) 55%, var(--rule)); }
+  .pill[data-tone="warning"] .dot  { background: var(--warning); }
+  .pill[data-tone="critical"] { border-color: color-mix(in srgb, var(--critical) 50%, var(--rule)); }
+  .pill[data-tone="critical"] .dot { background: var(--critical); }
+  .pill .dot.live { animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+
+  /* ---------- structure ---------- */
+  .grid { display: grid; gap: 14px; }
+  .row-main  { grid-template-columns: minmax(0,1.62fr) minmax(0,1fr); }
+  .row-halves{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .row-wide  { grid-template-columns: minmax(0,1.62fr) minmax(0,1fr); }
+  section.panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 14px 16px 16px; min-width: 0;
+  }
+  .panel > header {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-bottom: 12px;
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); margin: 0;
+  }
+  .sub { font-size: 12px; color: var(--muted); margin: 0; }
+  .stack { margin-top: 14px; }
+
+  /* ---------- hero / state ---------- */
+  .state-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 26px; margin-bottom: 4px; }
+  .hero-ph { display: flex; align-items: baseline; gap: 8px; }
+  .hero-ph .val { font-size: 52px; font-weight: 600; line-height: .95; letter-spacing: -.02em; }
+  .hero-ph .unit { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .readout { display: flex; align-items: baseline; gap: 7px; }
+  .readout .n { font-family: var(--mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .readout .u { font-size: 12px; color: var(--muted); }
+  .state-head .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 2px; }
+
+  /* ---------- gauges ---------- */
+  .gauge { width: 100%; height: auto; display: block; overflow: visible; }
+  .gauge-note { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .gauge-note b { color: var(--ink-2); font-weight: 600; font-family: var(--mono); }
+
+  /* ---------- tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 1px; background: var(--line);
+           border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .tile { background: var(--surface); padding: 12px 14px 13px; }
+  .tile .k { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font-size: 26px; font-weight: 600; margin-top: 3px; letter-spacing: -.01em; }
+  .tile .v small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+  .tile .d { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+
+  /* ---------- flow diagram ---------- */
+  .flow { width: 100%; height: auto; display: block; }
+  .pipe { stroke: var(--rule); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+  .pipe.on { stroke: var(--accent); }
+  .pipe.on.flow { stroke-dasharray: 10 12; animation: run 1s linear infinite; }
+  @keyframes run { to { stroke-dashoffset: -22; } }
+  .vessel { fill: var(--surface-2); stroke: var(--rule); stroke-width: 1.5; }
+  .liquid { fill: color-mix(in srgb, var(--series-ph) 34%, transparent); }
+  .node   { fill: var(--surface); stroke: var(--rule); stroke-width: 2; }
+  .node.open { fill: color-mix(in srgb, var(--good) 22%, var(--surface)); stroke: var(--good); }
+  .node.locked { fill: color-mix(in srgb, var(--critical) 16%, var(--surface)); stroke: var(--critical); }
+  .flow text { font-family: var(--sans); fill: var(--ink-2); }
+  .flow .lbl { font-size: 12px; font-weight: 600; fill: var(--ink); }
+  .flow .cap { font-size: 11px; fill: var(--muted); }
+  .flow .vv  { font-size: 12px; font-weight: 600; fill: var(--ink); font-family: var(--mono); }
+
+  /* ---------- charts ---------- */
+  .chart { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart text { font-family: var(--sans); }
+  .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  .baseline { stroke: var(--rule); stroke-width: 1; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .key { width: 12px; height: 12px; flex: none; }
+
+  /* ---------- log & table ---------- */
+  .log { font-family: var(--mono); font-size: 12px; max-height: 288px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+  .log li { display: flex; gap: 9px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .log li:last-child { border-bottom: 0; }
+  .log .t { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+  .log .m { color: var(--ink-2); }
+  .log li[data-tone="good"] .m { color: var(--ink); }
+  .log li[data-tone="critical"] .m { color: var(--critical); font-weight: 500; }
+  .log li[data-tone="warning"] .m { color: var(--ink); font-weight: 500; }
+
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  td { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  td.verdict { font-family: var(--sans); font-weight: 500; color: var(--ink); }
+  .vchip { display: inline-flex; align-items: center; gap: 6px; }
+  .vchip .g { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  /* ---------- controls ---------- */
+  .ctl { display: grid; gap: 13px; }
+  .slider label { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--ink-2); margin-bottom: 5px; }
+  .slider label b { font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .btns { display: flex; flex-wrap: wrap; gap: 7px; }
+  button {
+    font: inherit; font-size: 12px; font-weight: 500; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--rule); border-radius: 7px;
+    padding: 6px 11px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent-ink); }
+  button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: var(--accent); color: var(--accent-ink); }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .fieldnote { font-size: 12px; color: var(--muted); }
+  textarea {
+    width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--rule);
+    border-radius: 7px; padding: 8px; resize: vertical; min-height: 68px;
+  }
+  details summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
+  details[open] summary { margin-bottom: 8px; }
+
+  .tip {
+    position: fixed; z-index: 40; pointer-events: none; opacity: 0; transform: translate(-50%, -100%);
+    background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 7px;
+    box-shadow: 0 4px 14px rgba(13,20,19,.16); padding: 7px 9px; font-size: 12px; line-height: 1.4;
+    font-family: var(--mono); white-space: nowrap; transition: opacity .1s linear;
+  }
+  .tip b { font-family: var(--sans); font-weight: 600; }
+
+  .foot { margin-top: 20px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+
+  @media (max-width: 900px) {
+    .row-main, .row-halves, .row-wide { grid-template-columns: minmax(0,1fr); }
+    .tiles { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pipe.on.flow { animation: none; stroke-dasharray: none; }
+    .pill .dot.live { animation: none; }
+    * { transition-duration: 0.01ms !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="mast">
+    <h1>WaterGuard <span class="plant">· Kusile · sump 3 discharge</span></h1>
+    <span class="spacer"></span>
+    <span class="pill" id="masterPill" data-tone="good"><span class="dot live"></span><span id="masterText">Filling</span></span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+
+  <!-- ============ live state + flow ============ -->
+  <div class="grid row-main stack">
+    <section class="panel">
+      <header>
+        <p class="eyebrow">Batch in the check chamber</p>
+        <p class="sub">Pass band <b id="bandText">6.5 – 8.5 pH</b> · TDS ≤ 1,200 mg/L</p>
+      </header>
+
+      <div class="state-head">
+        <div>
+          <span class="k">Live pH</span>
+          <div class="hero-ph"><span class="val" id="phHero">7.04</span><span class="unit" id="phVerdict">inside band</span></div>
+        </div>
+        <div>
+          <span class="k">TDS</span>
+          <div class="readout"><span class="n" id="tdsVal">412</span><span class="u">mg/L</span></div>
+        </div>
+        <div>
+          <span class="k">Batch</span>
+          <div class="readout"><span class="n" id="batchNo">019</span><span class="u" id="chamberL">100 L</span></div>
+        </div>
+        <div>
+          <span class="k">Stage</span>
+          <div class="readout"><span class="n" id="stageName" style="font-size:15px">TEST</span><span class="u" id="stageNote">averaging 3 s</span></div>
+        </div>
+      </div>
+
+      <svg class="flow" viewBox="0 0 820 252" role="img" aria-labelledby="flowTitle">
+        <title id="flowTitle">Process flow: sump pump to check chamber, then valve V1 to the river or valve V2 to the treatment tank, which releases through valve V3.</title>
+
+        <path id="p0" class="pipe" d="M94 122 H130"></path>
+        <path id="p1" class="pipe" d="M240 122 H280 V88 H358"></path>
+        <path id="p2" class="pipe" d="M240 122 H280 V186 H358"></path>
+        <path id="p3" class="pipe" d="M394 88 H658"></path>
+        <path id="p4" class="pipe" d="M394 186 H430"></path>
+        <path id="p5" class="pipe" d="M580 186 H578"></path>
+        <path id="p6" class="pipe" d="M612 186 H640 V120 H658"></path>
+
+        <rect class="vessel" x="8" y="96" width="86" height="52" rx="6"></rect>
+        <text class="lbl" x="51" y="120" text-anchor="middle">Sump</text>
+        <text class="cap" x="51" y="136" text-anchor="middle" id="sumpState">pump off</text>
+
+        <rect class="vessel" x="130" y="56" width="110" height="132" rx="6"></rect>
+        <rect class="liquid" id="chamberFill" x="132" y="130" width="106" height="56" rx="4"></rect>
+        <text class="lbl" x="185" y="46" text-anchor="middle">Check chamber</text>
+        <text class="cap" x="185" y="206" text-anchor="middle" id="chamberCap">100 L batch</text>
+
+        <circle class="node" id="v1node" cx="376" cy="88" r="17"></circle>
+        <text class="vv" x="376" y="93" text-anchor="middle">V1</text>
+        <text class="cap" x="376" y="58" text-anchor="middle" id="v1cap">shut</text>
+
+        <circle class="node" id="v2node" cx="376" cy="186" r="17"></circle>
+        <text class="vv" x="376" y="191" text-anchor="middle">V2</text>
+        <text class="cap" x="376" y="222" text-anchor="middle" id="v2cap">shut</text>
+
+        <rect class="vessel" x="430" y="148" width="150" height="76" rx="6"></rect>
+        <rect class="liquid" id="tankFill" x="432" y="200" width="146" height="22" rx="4"></rect>
+        <text class="lbl" x="505" y="140" text-anchor="middle">Treatment tank</text>
+        <text class="cap" x="505" y="172" text-anchor="middle" id="tankCap">0 / 300 L</text>
+        <text class="cap" x="505" y="188" text-anchor="middle" id="tankPhCap">pH —</text>
+
+        <circle class="node" id="v3node" cx="596" cy="186" r="17"></circle>
+        <text class="vv" x="596" y="191" text-anchor="middle">V3</text>
+        <text class="cap" x="596" y="222" text-anchor="middle" id="v3cap">shut</text>
+
+        <rect class="vessel" x="658" y="56" width="154" height="64" rx="6"></rect>
+        <text class="lbl" x="735" y="82" text-anchor="middle">Wilge River</text>
+        <text class="cap" x="735" y="100" text-anchor="middle" id="riverCap">no discharge</text>
+      </svg>
+    </section>
+
+    <!-- ============ simulator ============ -->
+    <section class="panel">
+      <header>
+        <p class="eyebrow">Probe simulator</p>
+        <p class="sub">Tinkercad knobs</p>
+      </header>
+
+      <div class="ctl">
+        <div class="slider">
+          <label for="phKnob">Raw water pH <b id="phKnobVal">7.0</b></label>
+          <input type="range" id="phKnob" min="0" max="14" step="0.1" value="7">
+        </div>
+        <div class="slider">
+          <label for="tdsKnob">Raw water TDS <b id="tdsKnobVal">400 mg/L</b></label>
+          <input type="range" id="tdsKnob" min="0" max="2000" step="10" value="400">
+        </div>
+
+        <div class="btns">
+          <button type="button" id="btnAcid">Acid slug</button>
+          <button type="button" id="btnAlk">Alkaline slug</button>
+          <button type="button" id="btnTds">Salt load</button>
+          <button type="button" id="btnOver">Force over-dose</button>
+          <button type="button" id="btnEmpty" aria-pressed="false">Alkali empty</button>
+        </div>
+
+        <div class="btns">
+          <button type="button" id="btnRun" aria-pressed="true">Pause plant</button>
+          <button type="button" id="btnFast" aria-pressed="false">3× speed</button>
+          <button type="button" id="btnDrift" aria-pressed="true">Auto inflow drift</button>
+        </div>
+
+        <p class="fieldnote" id="reagentNote">Alkali 92% · acid trim 88%</p>
+
+        <details>
+          <summary>Feed from the real controller</summary>
+          <p class="fieldnote" style="margin-top:0">Paste <span style="font-family:var(--mono)">#WG,…</span> lines from the Serial Monitor and the dashboard replays them instead of simulating.</p>
+          <textarea id="serialIn" spellcheck="false" placeholder="#WG,12500,TEST,19,100.0,9.12,388,0,0,0,0.0,7.20,14,4,"></textarea>
+          <div class="btns" style="margin-top:8px">
+            <button type="button" id="btnReplay">Replay paste</button>
+            <button type="button" id="btnSim">Back to simulation</button>
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ instruments ============ -->
+  <div class="grid row-halves stack">
+    <section class="panel">
+      <header>
+        <p class="eyebrow">pH acceptance band</p>
+        <p class="sub">Both edges enforced</p>
+      </header>
+      <svg class="gauge" id="phGauge" viewBox="0 0 600 96" role="img" aria-labelledby="phGaugeT">
+        <title id="phGaugeT">pH scale from 0 to 14 with the acceptance band from 6.5 to 8.5.</title>
+      </svg>
+      <div class="gauge-note">
+        <span>Acid reject &lt; <b>6.5</b></span>
+        <span>Alkaline reject &gt; <b>8.5</b></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <p class="eyebrow">Dissolved solids</p>
+        <p class="sub">Limit 1,200 mg/L</p>
+      </header>
+      <svg class="gauge" id="tdsGauge" viewBox="0 0 600 96" role="img" aria-labelledby="tdsGaugeT">
+        <title id="tdsGaugeT">TDS meter from 0 to 2000 milligrams per litre with the limit at 1200.</title>
+      </svg>
+      <div class="gauge-note">
+        <span>Tank corrects pH only — a salty batch is held, not treated</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ tiles ============ -->
+  <div class="tiles stack" id="tiles">
+    <div class="tile"><div class="k">Batches tested</div><div class="v" id="kBatches">0</div><div class="d" id="kBatchesD">this shift</div></div>
+    <div class="tile"><div class="k">Passed first time</div><div class="v" id="kPass">0<small>%</small></div><div class="d" id="kPassD">0 of 0</div></div>
+    <div class="tile"><div class="k">Acid rejects</div><div class="v" id="kAcid">0</div><div class="d">pH below 6.5</div></div>
+    <div class="tile"><div class="k">Alkaline rejects</div><div class="v" id="kAlk">0</div><div class="d">pH above 8.5</div></div>
+    <div class="tile"><div class="k">To river</div><div class="v" id="kRiver">0<small>L</small></div><div class="d" id="kRiverD">0 L treated, 0 L direct</div></div>
+  </div>
+
+  <!-- ============ pH chart + log ============ -->
+  <div class="grid row-wide stack">
+    <section class="panel">
+      <header>
+        <p class="eyebrow">pH by batch — last 24</p>
+        <p class="sub">Anything outside the shaded band is diverted</p>
+      </header>
+      <svg class="chart" id="phChart" viewBox="0 0 640 260" role="img" aria-labelledby="phChartT">
+        <title id="phChartT">pH of each tested batch against the 6.5 to 8.5 acceptance band.</title>
+      </svg>
+      <div class="legend">
+        <span><svg class="key" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="#0ca30c"></circle></svg>Pass — inside the band</span>
+        <span><svg class="key" viewBox="0 0 12 12" aria-hidden="true"><polygon points="6,11 1,2 11,2" fill="#d03b3b"></polygon></svg>Acid reject — below 6.5</span>
+        <span><svg class="key" viewBox="0 0 12 12" aria-hidden="true"><polygon points="6,1 11,10 1,10" fill="#ec835a"></polygon></svg>Alkaline reject — above 8.5</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <p class="eyebrow">Event log</p>
+        <p class="sub" id="alarmNote">no alarms</p>
+      </header>
+      <ul class="log" id="log" aria-live="polite"></ul>
+    </section>
+  </div>
+
+  <!-- ============ TDS chart ============ -->
+  <section class="panel stack">
+    <header>
+      <p class="eyebrow">TDS by batch — last 24</p>
+      <p class="sub">Columns above the limit line never reach valve V1</p>
+    </header>
+    <svg class="chart" id="tdsChart" viewBox="0 0 1000 200" role="img" aria-labelledby="tdsChartT">
+      <title id="tdsChartT">Total dissolved solids per batch against the 1200 milligram per litre limit.</title>
+    </svg>
+  </section>
+
+  <!-- ============ table ============ -->
+  <section class="panel stack">
+    <header>
+      <p class="eyebrow">Batch register</p>
+      <p class="sub">Every value plotted above, as recorded</p>
+    </header>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Batch</th><th scope="col">Time</th><th scope="col">pH</th><th scope="col">TDS mg/L</th><th scope="col">Volume</th><th scope="col">Verdict</th><th scope="col">Routed</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">
+    <span>100 L batches · probes averaged 3 s · release confirmed 3 s</span>
+    <span>V3 interlocked against V2</span>
+    <span>Telemetry: <span style="font-family:var(--mono)">#WG</span> CSV @ 2 Hz</span>
+  </p>
+</div>
+
+<div class="tip" id="tip" role="status" aria-live="off"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ================= plant constants — mirror waterguard.ino ================= */
+  const PH_MIN = 6.5, PH_MAX = 8.5, TDS_MAX = 1200;
+  const PH_AIM_LO = 6.8, PH_AIM_HI = 7.8;
+  const BATCH_L = 100, TANK_CAP_L = 300, FILL_LPS = 20, DRAIN_LPS = 25;
+  const AVG_MS = 3000, STABLE_MS = 3000, DOSE_MIX_MS = 1600;
+
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const fmt = (n) => Math.round(n).toLocaleString("en-ZA");
+
+  /* ================= state ================= */
+  const S = {
+    stage: "FILL", tEnter: 0, tStable: 0, tPulse: 0,
+    chamberL: 0, tankL: 0, tankPh: 7.1,
+    ph: 7.04, tds: 412, probePh: 7.0, probeTds: 400,
+    batchNo: 18, pulses: 0, dosing: null,
+    alkali: 92, acid: 88, alkaliEmpty: false,
+    alarm: "", running: true, fast: false, drift: true, replay: null,
+    litresDirect: 0, litresTreated: 0,
+    batches: [], log: []
+  };
+
+  const STAGE_NOTE = {
+    FILL: "sump filling", TEST: "averaging 3 s", DISCHARGE: "to river via V1",
+    DIVERT: "to tank via V2", TREAT: "dosing", CONFIRM: "holding band 3 s",
+    RELEASE: "treated water via V3", HOLD: "batch held", LOCKOUT: "V3 locked"
+  };
+
+  function verdictOf(ph, tds) {
+    if (ph < PH_MIN) return "acid";
+    if (ph > PH_MAX) return "alkaline";
+    if (tds > TDS_MAX) return "saline";
+    return "pass";
+  }
+  const TONE = { pass: "good", acid: "critical", alkaline: "serious", saline: "warning" };
+  const VERDICT_LABEL = { pass: "Pass", acid: "Acid reject", alkaline: "Alkaline reject", saline: "TDS reject" };
+  const toneColor = (t) => getComputedStyle(document.documentElement).getPropertyValue(
+    t === "good" ? "--good" : t === "critical" ? "--critical" : t === "serious" ? "--serious" : "--warning").trim();
+
+  /* ================= seed: a shift already under way ================= */
+  (function seed() {
+    const seeds = [
+      [6.9, 380], [7.1, 420], [6.6, 510], [5.9, 640], [7.0, 455], [7.2, 390],
+      [8.9, 470], [7.4, 405], [6.8, 520], [6.1, 700], [7.0, 430], [7.3, 365],
+      [9.2, 445], [7.1, 480], [6.7, 1310], [7.0, 395], [7.5, 410], [6.4, 560]
+    ];
+    const t0 = Date.now() - seeds.length * 62000;
+    seeds.forEach((s, i) => {
+      const v = verdictOf(s[0], s[1]);
+      S.batches.push({ n: i + 1, ph: s[0], tds: s[1], verdict: v, at: new Date(t0 + i * 62000) });
+      if (v === "pass") S.litresDirect += BATCH_L; else S.litresTreated += BATCH_L;
+    });
+    log("shift start — pass band 6.5–8.5 pH, TDS ≤ 1,200", "");
+    log("batch 013 alkaline reject at pH 9.2 — diverted to V2", "critical");
+    log("batch 015 TDS 1,310 mg/L — diverted to V2", "warning");
+    log("tank released 100 L at pH 7.3", "good");
+  })();
+
+  function log(msg, tone) {
+    S.log.unshift({ t: new Date(), m: msg, tone: tone || "" });
+    if (S.log.length > 60) S.log.pop();
+    renderLog();
+  }
+  const hhmmss = (d) => d.toTimeString().slice(0, 8);
+
+  /* ================= controller loop — same states as the sketch ================= */
+  let last = performance.now(), simClock = 0;
+
+  function go(next) { S.stage = next; S.tEnter = simClock; }
+
+  let acc = { ph: 0, tds: 0, n: 0 };
+
+  function step(dt) {
+    simClock += dt * 1000;
+
+    // probe reading: knob + a little sensor noise
+    const noise = () => (Math.random() - 0.5) * 0.06;
+    if (S.drift && S.stage === "FILL" && Math.random() < 0.012) {
+      S.probePh = clamp(S.probePh + (Math.random() - 0.5) * 1.4, 4.2, 9.8);
+      S.probeTds = clamp(S.probeTds + (Math.random() - 0.5) * 420, 180, 1700);
+      syncKnobs();
+    }
+    const livePh = clamp(S.probePh + noise(), 0, 14);
+    const liveTds = Math.max(0, S.probeTds + (Math.random() - 0.5) * 18);
+
+    switch (S.stage) {
+      case "FILL":
+        S.ph = livePh; S.tds = liveTds;
+        S.chamberL += FILL_LPS * dt;
+        if (S.chamberL >= BATCH_L) {
+          S.chamberL = BATCH_L; acc = { ph: 0, tds: 0, n: 0 };
+          S.batchNo++; go("TEST");
+        }
+        break;
+
+      case "TEST": {
+        acc.ph += livePh; acc.tds += liveTds; acc.n++;
+        S.ph = acc.ph / acc.n; S.tds = acc.tds / acc.n;
+        if (simClock - S.tEnter >= AVG_MS) {
+          const v = verdictOf(S.ph, S.tds);
+          S.batches.push({ n: S.batchNo, ph: S.ph, tds: S.tds, verdict: v, at: new Date() });
+          if (S.batches.length > 200) S.batches.shift();
+          if (v === "pass") {
+            log("batch " + pad(S.batchNo) + " pass — pH " + S.ph.toFixed(2) + ", TDS " + fmt(S.tds) + " — V1 open", "good");
+            go("DISCHARGE");
+          } else if (S.tankL + BATCH_L > TANK_CAP_L) {
+            S.alarm = "TANK FULL — BATCH HELD";
+            log("batch " + pad(S.batchNo) + " " + VERDICT_LABEL[v].toLowerCase() + " — tank full, batch held", "critical");
+            go("HOLD");
+          } else {
+            log("batch " + pad(S.batchNo) + " " + VERDICT_LABEL[v].toLowerCase() + " at pH " + S.ph.toFixed(2) +
+                (v === "saline" ? ", TDS " + fmt(S.tds) : "") + " — V2 open", v === "alkaline" ? "warning" : "critical");
+            go("DIVERT");
+          }
+          render();
+        }
+        break;
+      }
+
+      case "DISCHARGE":
+        S.chamberL -= DRAIN_LPS * dt;
+        S.litresDirect += DRAIN_LPS * dt;
+        if (S.chamberL <= 0) { S.chamberL = 0; go("FILL"); }
+        break;
+
+      case "DIVERT": {
+        const moved = Math.min(DRAIN_LPS * dt, S.chamberL);
+        S.tankPh = (S.tankPh * S.tankL + S.ph * moved) / Math.max(0.001, S.tankL + moved);
+        S.chamberL -= moved; S.tankL += moved;
+        if (S.chamberL <= 0.01) {
+          S.chamberL = 0; S.pulses = 0; S.alarm = "";
+          S.tPulse = simClock; go("TREAT");
+        }
+        break;
+      }
+
+      case "TREAT": {
+        const needBase = S.tankPh < PH_AIM_LO, needAcid = S.tankPh > PH_AIM_HI;
+        if (!needBase && !needAcid) { S.dosing = null; S.tStable = 0; go("CONFIRM"); break; }
+        if (needBase && (S.alkaliEmpty || S.alkali <= 0)) {
+          S.dosing = null; S.alarm = "ALKALI EMPTY — V3 LOCKED";
+          if (S.stage !== "LOCKOUT") log("alkali empty during batch " + pad(S.batchNo) + " — V3 locked, siren on", "critical");
+          go("LOCKOUT"); break;
+        }
+        if (needAcid && S.acid <= 0) {
+          S.dosing = null; S.alarm = "ACID TRIM EMPTY — V3 LOCKED";
+          log("acid trim empty at pH " + S.tankPh.toFixed(2) + " — V3 locked", "critical");
+          go("LOCKOUT"); break;
+        }
+        if (simClock - S.tPulse >= DOSE_MIX_MS) {       // pulse, then mix before re-reading
+          S.tPulse = simClock; S.pulses++;
+          S.dosing = needBase ? "alkali" : "acid";
+          S.tankPh += (needBase ? 0.32 : -0.28) + (Math.random() - 0.4) / 5;
+          if (needBase) S.alkali = Math.max(0, S.alkali - 0.7); else S.acid = Math.max(0, S.acid - 0.6);
+          if (S.pulses === 1) log("tank at pH " + (S.tankPh).toFixed(2) + " — dosing " + S.dosing, "");
+          if (!needBase) log("over-dosed to pH " + (S.tankPh + 0.28).toFixed(2) + " — acid trim pulse", "warning");
+        }
+        break;
+      }
+
+      case "CONFIRM":
+        S.dosing = null;
+        if (S.tankPh < PH_MIN || S.tankPh > PH_MAX) { S.tStable = 0; go("TREAT"); break; }
+        if (!S.tStable) S.tStable = simClock;
+        if (simClock - S.tStable >= STABLE_MS) {
+          S.alarm = "";
+          log("tank held " + S.tankPh.toFixed(2) + " pH for 3 s — V3 opening", "good");
+          go("RELEASE");
+        }
+        break;
+
+      case "RELEASE":
+        if (S.tankPh < PH_MIN || S.tankPh > PH_MAX) {
+          S.alarm = "pH DRIFT — V3 SHUT";
+          log("pH drifted to " + S.tankPh.toFixed(2) + " mid-release — V3 shut", "critical");
+          go("TREAT"); break;
+        }
+        S.tankL -= DRAIN_LPS * dt;
+        S.litresTreated += DRAIN_LPS * dt;
+        if (S.tankL <= 0) { S.tankL = 0; log("tank empty — back to filling", ""); go("FILL"); }
+        break;
+
+      case "HOLD":
+        if (S.tankL + BATCH_L <= TANK_CAP_L) { S.alarm = ""; go("DIVERT"); }
+        break;
+
+      case "LOCKOUT":
+        if (!(S.tankPh < PH_MIN || S.tankPh > PH_MAX) &&
+            !(S.tankPh < PH_AIM_LO && (S.alkaliEmpty || S.alkali <= 0)) &&
+            !(S.tankPh > PH_AIM_HI && S.acid <= 0)) {
+          S.alarm = ""; S.pulses = 0; log("fault cleared — resuming treatment", "good"); go("TREAT");
+        }
+        break;
+    }
+  }
+
+  function frame(now) {
+    let dt = (now - last) / 1000; last = now;
+    dt = Math.min(dt, 0.1);
+    if (S.running && !S.replay) step(dt * (S.fast ? 3 : 1));
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const pad = (n) => String(n).padStart(3, "0");
+
+  /* ================= render ================= */
+  let lastSig = "";
+
+  function render() {
+    const v = verdictOf(S.ph, S.tds);
+    const open = { v1: S.stage === "DISCHARGE", v2: S.stage === "DIVERT", v3: S.stage === "RELEASE" };
+
+    $("clock").textContent = hhmmss(new Date());
+    $("phHero").textContent = S.ph.toFixed(2);
+    $("phVerdict").textContent = S.ph < PH_MIN ? "below 6.5 — acidic" : S.ph > PH_MAX ? "above 8.5 — alkaline" : "inside band";
+    $("phVerdict").style.color = v === "pass" ? "" : toneColor(TONE[v]);
+    $("tdsVal").textContent = fmt(S.tds);
+    $("batchNo").textContent = pad(S.batchNo);
+    $("chamberL").textContent = Math.round(S.chamberL) + " L";
+    $("stageName").textContent = S.stage;
+    $("stageNote").textContent = STAGE_NOTE[S.stage];
+
+    const tone = S.alarm ? "critical" : (open.v1 || open.v3) ? "good" : (S.stage === "DIVERT" || S.stage === "HOLD") ? "warning" : "good";
+    $("masterPill").dataset.tone = tone;
+    $("masterText").textContent = S.alarm ? S.alarm :
+      open.v1 ? "Discharging to river" : open.v3 ? "Releasing treated water" :
+      S.stage === "DIVERT" ? "Diverting to tank" : S.stage === "TREAT" ? "Treating" :
+      S.stage === "CONFIRM" ? "Confirming" : S.stage === "TEST" ? "Testing batch" :
+      S.stage === "HOLD" ? "Batch held" : "Filling";
+    $("alarmNote").textContent = S.alarm ? S.alarm.toLowerCase() : "no alarms";
+    $("alarmNote").style.color = S.alarm ? toneColor("critical") : "";
+
+    // flow diagram
+    const fillH = 130 * (S.chamberL / BATCH_L);
+    $("chamberFill").setAttribute("y", 186 - fillH);
+    $("chamberFill").setAttribute("height", Math.max(0, fillH));
+    const tankH = 74 * (S.tankL / TANK_CAP_L);
+    $("tankFill").setAttribute("y", 222 - tankH);
+    $("tankFill").setAttribute("height", Math.max(0, tankH));
+    $("chamberCap").textContent = Math.round(S.chamberL) + " / 100 L";
+    $("tankCap").textContent = Math.round(S.tankL) + " / 300 L";
+    $("tankPhCap").textContent = S.tankL > 0 ? "pH " + S.tankPh.toFixed(2) + (S.dosing ? " · " + S.dosing : "") : "empty";
+    $("sumpState").textContent = S.stage === "FILL" ? "pumping" : "pump off";
+    setPipe("p0", S.stage === "FILL"); setPipe("p1", open.v1); setPipe("p2", open.v2);
+    setPipe("p3", open.v1); setPipe("p4", open.v2); setPipe("p6", open.v3);
+    setNode("v1node", open.v1, false); setNode("v2node", open.v2, false);
+    setNode("v3node", open.v3, S.stage === "LOCKOUT" || S.stage === "DIVERT");
+    $("v1cap").textContent = open.v1 ? "open" : "shut";
+    $("v2cap").textContent = open.v2 ? "open" : "shut";
+    $("v3cap").textContent = open.v3 ? "open" : S.stage === "LOCKOUT" ? "locked" : S.stage === "DIVERT" ? "interlocked" : "shut";
+    $("riverCap").textContent = open.v1 ? "receiving tested water" : open.v3 ? "receiving treated water" : "no discharge";
+    $("reagentNote").textContent = "Alkali " + Math.round(S.alkali) + "% · acid trim " + Math.round(S.acid) + "%" +
+      (S.alkaliEmpty ? " · level switch tripped" : "");
+
+    drawPhGauge(S.ph);
+    drawTdsGauge(S.tds);
+
+    // heavier redraws only when the batch register actually changes
+    const sig = S.batches.length + ":" + S.batches[S.batches.length - 1].n;
+    if (sig !== lastSig) { lastSig = sig; drawPhChart(); drawTdsChart(); renderTable(); }
+    renderTiles();
+  }
+
+  function setPipe(id, on) { const e = $(id); e.classList.toggle("on", !!on); e.classList.toggle("flow", !!on); }
+  function setNode(id, open, locked) { const e = $(id); e.classList.toggle("open", !!open); e.classList.toggle("locked", !!locked && !open); }
+
+  function renderTiles() {
+    const b = S.batches, n = b.length;
+    const pass = b.filter((x) => x.verdict === "pass").length;
+    $("kBatches").textContent = n;
+    $("kBatchesD").textContent = "this shift";
+    $("kPass").innerHTML = (n ? Math.round(pass / n * 100) : 0) + "<small>%</small>";
+    $("kPassD").textContent = pass + " of " + n;
+    $("kAcid").textContent = b.filter((x) => x.verdict === "acid").length;
+    $("kAlk").textContent = b.filter((x) => x.verdict === "alkaline").length;
+    $("kRiver").innerHTML = fmt(S.litresDirect + S.litresTreated) + "<small>L</small>";
+    $("kRiverD").textContent = fmt(S.litresTreated) + " L treated, " + fmt(S.litresDirect) + " L direct";
+  }
+
+  function renderLog() {
+    $("log").innerHTML = S.log.map((e) =>
+      '<li data-tone="' + e.tone + '"><span class="t">' + hhmmss(e.t) + '</span><span class="m">' + e.m + "</span></li>").join("");
+  }
+
+  function renderTable() {
+    const rows = S.batches.slice(-24).reverse().map((b) => {
+      const c = toneColor(TONE[b.verdict]);
+      return "<tr><td>" + pad(b.n) + "</td><td>" + hhmmss(b.at) + "</td><td>" + b.ph.toFixed(2) + "</td><td>" +
+        fmt(b.tds) + "</td><td>100 L</td><td class=\"verdict\"><span class=\"vchip\"><span class=\"g\" style=\"background:" +
+        c + '"></span>' + VERDICT_LABEL[b.verdict] + "</span></td><td>" + (b.verdict === "pass" ? "V1 river" : "V2 tank") + "</td></tr>";
+    });
+    $("tbody").innerHTML = rows.join("");
+  }
+
+  /* ================= instruments ================= */
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, text) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function drawPhGauge(ph) {
+    const svg = $("phGauge");
+    const keep = svg.querySelector("title");
+    svg.textContent = ""; svg.appendChild(keep);
+    const x0 = 14, x1 = 586, y = 52, h = 22;
+    const px = (v) => x0 + (v / 14) * (x1 - x0);
+
+    svg.appendChild(el("rect", { x: x0, y: y, width: x1 - x0, height: h, rx: 4, fill: css("--surface-2"), stroke: css("--line") }));
+    svg.appendChild(el("rect", { x: px(PH_MIN), y: y, width: px(PH_MAX) - px(PH_MIN), height: h, fill: css("--band"), stroke: css("--good"), "stroke-width": 1 }));
+
+    [0, 7, 14].forEach((t) => {
+      svg.appendChild(el("line", { x1: px(t), y1: y + h, x2: px(t), y2: y + h + 5, stroke: css("--rule"), "stroke-width": 1 }));
+      svg.appendChild(el("text", { x: px(t), y: y + h + 18, "text-anchor": t === 0 ? "start" : t === 14 ? "end" : "middle", class: "tick", fill: css("--muted") }, "pH " + t));
+    });
+
+    [[PH_MIN, "6.5"], [PH_MAX, "8.5"]].forEach(([v, label], i) => {
+      svg.appendChild(el("line", { x1: px(v), y1: y - 9, x2: px(v), y2: y + h, stroke: css("--good"), "stroke-width": 2 }));
+      svg.appendChild(el("text", { x: px(v), y: y - 14, "text-anchor": i ? "start" : "end", class: "tick", fill: css("--ink-2"), "font-weight": 600 }, label));
+    });
+
+    const v = verdictOf(ph, 0), c = toneColor(TONE[v === "saline" ? "pass" : v]);
+    const x = px(clamp(ph, 0, 14));
+    svg.appendChild(el("polygon", { points: (x - 7) + "," + (y - 2) + " " + (x + 7) + "," + (y - 2) + " " + x + "," + (y + 9), fill: c, stroke: css("--surface"), "stroke-width": 2 }));
+    svg.appendChild(el("rect", { x: x - 1.5, y: y, width: 3, height: h, fill: c }));
+    svg.appendChild(el("text", { x: clamp(x, 30, x1 - 30), y: 22, "text-anchor": "middle", class: "tick", fill: css("--ink"), "font-weight": 600, "font-size": 13 }, ph.toFixed(2)));
+  }
+
+  function drawTdsGauge(tds) {
+    const svg = $("tdsGauge");
+    const keep = svg.querySelector("title");
+    svg.textContent = ""; svg.appendChild(keep);
+    const x0 = 14, x1 = 586, y = 52, h = 22, MAXV = 2000;
+    const px = (v) => x0 + (v / MAXV) * (x1 - x0);
+
+    svg.appendChild(el("rect", { x: x0, y: y, width: x1 - x0, height: h, rx: 4, fill: css("--surface-2"), stroke: css("--line") }));
+    const over = tds > TDS_MAX;
+    const near = !over && tds > TDS_MAX * 0.8;
+    const c = over ? css("--critical") : near ? css("--warning") : css("--series-ph");
+    svg.appendChild(el("rect", { x: x0, y: y, width: Math.max(2, px(clamp(tds, 0, MAXV)) - x0), height: h, rx: 4, fill: c }));
+
+    svg.appendChild(el("line", { x1: px(TDS_MAX), y1: y - 9, x2: px(TDS_MAX), y2: y + h + 4, stroke: css("--ink-2"), "stroke-width": 2 }));
+    svg.appendChild(el("text", { x: px(TDS_MAX) + 6, y: y - 14, class: "tick", fill: css("--ink-2"), "font-weight": 600 }, "1,200 limit"));
+
+    [0, 1000, 2000].forEach((t) => {
+      svg.appendChild(el("text", { x: px(t), y: y + h + 18, "text-anchor": t === 0 ? "start" : t === MAXV ? "end" : "middle", class: "tick", fill: css("--muted") }, fmt(t)));
+    });
+    svg.appendChild(el("text", { x: x0, y: 22, class: "tick", fill: css("--ink"), "font-weight": 600, "font-size": 13 }, fmt(tds) + " mg/L"));
+  }
+
+  /* ================= charts ================= */
+  function drawPhChart() {
+    const svg = $("phChart");
+    const keep = svg.querySelector("title");
+    svg.textContent = ""; svg.appendChild(keep);
+    const data = S.batches.slice(-24);
+    const L = 40, R = 16, T = 16, B = 34, W = 640, H = 260;
+    const lo = 3.5, hi = 10.5;
+    const px = (i) => L + (data.length < 2 ? (W - L - R) / 2 : i * (W - L - R) / (data.length - 1));
+    const py = (v) => T + (hi - clamp(v, lo, hi)) / (hi - lo) * (H - T - B);
+
+    svg.appendChild(el("rect", { x: L, y: py(PH_MAX), width: W - L - R, height: py(PH_MIN) - py(PH_MAX), fill: css("--band") }));
+    [PH_MIN, PH_MAX].forEach((v) => svg.appendChild(el("line", { x1: L, y1: py(v), x2: W - R, y2: py(v), stroke: css("--good"), "stroke-width": 2 })));
+    svg.appendChild(el("text", { x: W - R - 4, y: py(PH_MAX) - 7, "text-anchor": "end", class: "tick", fill: css("--ink-2"), "font-weight": 600 }, "ceiling 8.5"));
+    svg.appendChild(el("text", { x: W - R - 4, y: py(PH_MIN) + 16, "text-anchor": "end", class: "tick", fill: css("--ink-2"), "font-weight": 600 }, "floor 6.5"));
+
+    [4, 6, 8, 10].forEach((t) => {
+      svg.appendChild(el("line", { x1: L, y1: py(t), x2: W - R, y2: py(t), class: "gridline", stroke: css("--line") }));
+      svg.appendChild(el("text", { x: L - 8, y: py(t) + 4, "text-anchor": "end", class: "tick", fill: css("--muted") }, t.toFixed(1)));
+    });
+    svg.appendChild(el("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, class: "baseline", stroke: css("--rule") }));
+
+    const line = data.map((b, i) => (i ? "L" : "M") + px(i) + " " + py(b.ph)).join(" ");
+    svg.appendChild(el("path", { d: line, fill: "none", stroke: css("--rule"), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+    data.forEach((b, i) => {
+      const x = px(i), y = py(b.ph), c = toneColor(TONE[b.verdict]);
+      let mark;
+      if (b.verdict === "alkaline") mark = el("polygon", { points: x + "," + (y - 6) + " " + (x + 6) + "," + (y + 5) + " " + (x - 6) + "," + (y + 5) });
+      else if (b.verdict === "acid") mark = el("polygon", { points: x + "," + (y + 6) + " " + (x + 6) + "," + (y - 5) + " " + (x - 6) + "," + (y - 5) });
+      else if (b.verdict === "saline") mark = el("rect", { x: x - 5, y: y - 5, width: 10, height: 10 });
+      else mark = el("circle", { cx: x, cy: y, r: 5 });
+      mark.setAttribute("fill", c);
+      mark.setAttribute("stroke", css("--surface"));
+      mark.setAttribute("stroke-width", 2);
+      svg.appendChild(mark);
+
+      const hit = el("circle", { cx: x, cy: y, r: 13, fill: "transparent" });
+      hit.style.cursor = "crosshair";
+      hit.addEventListener("pointerenter", (e) => showTip(e,
+        "<b>Batch " + pad(b.n) + "</b><br>pH " + b.ph.toFixed(2) + " · TDS " + fmt(b.tds) + " mg/L<br>" + VERDICT_LABEL[b.verdict]));
+      hit.addEventListener("pointerleave", hideTip);
+      svg.appendChild(hit);
+
+      if (i === 0 || i === data.length - 1 || b.verdict !== "pass") {
+        svg.appendChild(el("text", { x: x, y: H - B + 16, "text-anchor": "middle", class: "tick", fill: css("--muted") }, pad(b.n)));
+      }
+    });
+  }
+
+  function drawTdsChart() {
+    const svg = $("tdsChart");
+    const keep = svg.querySelector("title");
+    svg.textContent = ""; svg.appendChild(keep);
+    const data = S.batches.slice(-24);
+    const L = 52, R = 14, T = 20, B = 30, W = 1000, H = 200, MAXV = 2000;
+    const band = (W - L - R) / Math.max(1, data.length);
+    const bw = Math.min(24, band - 6);
+    const py = (v) => T + (1 - clamp(v, 0, MAXV) / MAXV) * (H - T - B);
+
+    [0, 1000, 2000].forEach((t) => {
+      svg.appendChild(el("line", { x1: L, y1: py(t), x2: W - R, y2: py(t), class: "gridline", stroke: css("--line") }));
+      svg.appendChild(el("text", { x: L - 8, y: py(t) + 4, "text-anchor": "end", class: "tick", fill: css("--muted") }, fmt(t)));
+    });
+
+    data.forEach((b, i) => {
+      const x = L + i * band + (band - bw) / 2;
+      const y = py(b.tds), h = (H - B) - y;
+      const over = b.tds > TDS_MAX;
+      const r = el("rect", { x: x, y: y, width: bw, height: Math.max(2, h), rx: 4,
+        fill: over ? css("--critical") : css("--series-ph") });
+      svg.appendChild(r);
+      svg.appendChild(el("rect", { x: x, y: (H - B) - Math.min(6, h), width: bw, height: Math.min(6, h), fill: over ? css("--critical") : css("--series-ph") }));
+      const hit = el("rect", { x: L + i * band, y: T, width: band, height: H - T - B, fill: "transparent" });
+      hit.addEventListener("pointerenter", (e) => showTip(e,
+        "<b>Batch " + pad(b.n) + "</b><br>TDS " + fmt(b.tds) + " mg/L<br>" + (over ? "over the 1,200 limit" : "within limit")));
+      hit.addEventListener("pointerleave", hideTip);
+      svg.appendChild(hit);
+    });
+
+    svg.appendChild(el("line", { x1: L, y1: py(TDS_MAX), x2: W - R, y2: py(TDS_MAX), stroke: css("--ink-2"), "stroke-width": 2, "stroke-dasharray": "6 5" }));
+    svg.appendChild(el("text", { x: L + 4, y: py(TDS_MAX) - 6, class: "tick", fill: css("--ink-2"), "font-weight": 600 }, "1,200 mg/L limit"));
+    svg.appendChild(el("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, class: "baseline", stroke: css("--rule") }));
+    svg.appendChild(el("text", { x: L, y: H - B + 18, class: "tick", fill: css("--muted") }, "batch " + pad(data[0].n)));
+    svg.appendChild(el("text", { x: W - R, y: H - B + 18, "text-anchor": "end", class: "tick", fill: css("--muted") }, "batch " + pad(data[data.length - 1].n)));
+  }
+
+  /* ================= tooltip ================= */
+  const tip = $("tip");
+  function showTip(e, html) {
+    tip.innerHTML = html;
+    tip.style.left = e.clientX + "px";
+    tip.style.top = (e.clientY - 12) + "px";
+    tip.style.opacity = "1";
+  }
+  function hideTip() { tip.style.opacity = "0"; }
+
+  /* ================= controls ================= */
+  function syncKnobs() {
+    $("phKnob").value = S.probePh.toFixed(1);
+    $("tdsKnob").value = Math.round(S.probeTds);
+    $("phKnobVal").textContent = S.probePh.toFixed(1);
+    $("tdsKnobVal").textContent = fmt(S.probeTds) + " mg/L";
+  }
+  $("phKnob").addEventListener("input", (e) => { S.probePh = +e.target.value; S.drift = false; setPressed("btnDrift", false); syncKnobs(); });
+  $("tdsKnob").addEventListener("input", (e) => { S.probeTds = +e.target.value; S.drift = false; setPressed("btnDrift", false); syncKnobs(); });
+
+  function setPressed(id, on) { $(id).setAttribute("aria-pressed", on ? "true" : "false"); }
+
+  $("btnAcid").addEventListener("click", () => { S.probePh = 4.1; S.drift = false; setPressed("btnDrift", false); syncKnobs(); log("operator injected an acid slug at the sump", ""); });
+  $("btnAlk").addEventListener("click", () => { S.probePh = 9.3; S.drift = false; setPressed("btnDrift", false); syncKnobs(); log("operator injected an alkaline slug at the sump", ""); });
+  $("btnTds").addEventListener("click", () => { S.probeTds = 1550; S.drift = false; setPressed("btnDrift", false); syncKnobs(); log("operator injected a salt load at the sump", ""); });
+  $("btnOver").addEventListener("click", () => {
+    S.tankPh = 9.4;
+    log("dosing fault — tank forced to pH 9.40", "critical");
+    if (S.stage === "CONFIRM" || S.stage === "RELEASE") go("TREAT");
+  });
+  $("btnEmpty").addEventListener("click", () => {
+    S.alkaliEmpty = !S.alkaliEmpty;
+    setPressed("btnEmpty", S.alkaliEmpty);
+    log(S.alkaliEmpty ? "alkali level switch tripped" : "alkali drum refilled", S.alkaliEmpty ? "critical" : "good");
+    if (!S.alkaliEmpty) S.alkali = Math.max(S.alkali, 60);
+  });
+  $("btnRun").addEventListener("click", () => {
+    S.running = !S.running;
+    setPressed("btnRun", S.running);
+    $("btnRun").textContent = S.running ? "Pause plant" : "Resume plant";
+  });
+  $("btnFast").addEventListener("click", () => { S.fast = !S.fast; setPressed("btnFast", S.fast); });
+  $("btnDrift").addEventListener("click", () => { S.drift = !S.drift; setPressed("btnDrift", S.drift); });
+
+  /* ---- replay of real controller telemetry ---- */
+  $("btnReplay").addEventListener("click", () => {
+    const lines = $("serialIn").value.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.startsWith("#WG,") && s.split(",").length >= 14);
+    if (!lines.length) { log("no #WG telemetry lines found in the paste", "warning"); return; }
+    S.replay = { lines: lines, i: 0, lastBatch: null };
+    log("replaying " + lines.length + " telemetry lines from the controller", "");
+    tickReplay();
+  });
+  $("btnSim").addEventListener("click", () => { S.replay = null; log("back to the simulated plant", ""); });
+
+  function tickReplay() {
+    if (!S.replay) return;
+    const r = S.replay;
+    if (r.i >= r.lines.length) { S.replay = null; log("telemetry replay finished", "good"); return; }
+    const f = r.lines[r.i++].split(",");
+    // #WG,ms,state,batch,chamberL,pH,TDS,v1,v2,v3,tankL,tankPh,pass,fail,alarm
+    S.stage = f[2]; S.batchNo = +f[3] || S.batchNo; S.chamberL = +f[4] || 0;
+    S.ph = +f[5] || 0; S.tds = +f[6] || 0; S.tankL = +f[10] || 0; S.tankPh = +f[11] || 7;
+    S.alarm = (f[14] || "").trim();
+    if (r.lastBatch !== null && S.batchNo !== r.lastBatch && S.stage !== "FILL") {
+      const v = verdictOf(S.ph, S.tds);
+      S.batches.push({ n: S.batchNo, ph: S.ph, tds: S.tds, verdict: v, at: new Date() });
+      log("controller batch " + pad(S.batchNo) + " — " + VERDICT_LABEL[v].toLowerCase(), v === "pass" ? "good" : "critical");
+    }
+    r.lastBatch = S.batchNo;
+    render();
+    setTimeout(tickReplay, 250);
+  }
+
+  /* ================= go ================= */
+  syncKnobs();
+  S.chamberL = BATCH_L * 0.35;
+  drawPhChart(); drawTdsChart(); renderTable(); renderTiles(); renderLog();
+  requestAnimationFrame(frame);
+  window.addEventListener("scroll", hideTip, { passive: true });
+})();
+</script>
