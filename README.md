@@ -5,6 +5,20 @@ MICTSETA Digital-to-Physical hackathon · Mpumalanga, South Africa
 
 **Live:** https://izimpisi-ze-data.web.app
 
+The deployed build runs the **in-browser simulation**, not a backend — Firebase gets connected
+later. Sign in with one of the demo accounts listed on the login page (tap one to fill the form,
+password `demo1234`):
+
+| Account | Role | Can do |
+|---|---|---|
+| `admin@waterguard.demo` | admin | everything, including limits and people |
+| `operator@waterguard.demo` | operator | run the plant |
+| `viewer@waterguard.demo` | viewer | read only |
+
+The simulation runs live in the tab: seven days of history are generated at load, three devices
+tick every 500 ms, and commands are validated against the real interlocks. Nothing is shared
+between visitors and a refresh starts a fresh plant.
+
 Mine water is caught in 100 L batches and tested **before** any of it reaches the river. Bad water is
 trapped in the check chamber instead of being found downstream after it has already done damage.
 
