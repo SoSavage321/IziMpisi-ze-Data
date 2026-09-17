@@ -1,0 +1,287 @@
+#include <Servo.h>
+
+// ---------- Pins ----------
+const int PIN_PH_CHAMBER  = A0;
+const int PIN_TDS_CHAMBER = A1;
+const int PIN_PH_TANK     = A2;
+const int PIN_LEVEL       = 2;   // HIGH = neutraliser present, LOW = empty
+const int PIN_V1          = 3;   // valve to river
+const int PIN_BUZZER      = 4;
+const int PIN_V2          = 5;   // valve to treatment tank
+const int PIN_V3          = 6;   // release valve
+const int PIN_SUMP_PUMP   = 7;   // L293D Input 1
+const int PIN_DOSE_PUMP   = 8;   // L293D Input 3
+const int PIN_LED_GREEN   = 11;
+const int PIN_LED_RED     = 12;
+const int PIN_LED_YELLOW  = 13;
+
+// ---------- Settings ----------
+const float BATCH_LITRES    = 100.0;
+const float LITRES_PER_TICK = 5.0;
+const float TANK_CAPACITY   = 300.0;
+const float PH_SAFE_MIN     = 6.5;
+const float TDS_SAFE_MAX    = 1200.0;
+const float TANK_RELEASE_PH = 6.8;
+const unsigned long TICK_MS    = 200;
+const unsigned long TEST_MS    = 3000;
+const unsigned long CONFIRM_MS = 3000;
+
+const int VALVE_SHUT = 0;
+const int VALVE_OPEN = 90;
+
+Servo v1;
+Servo v2;
+Servo v3;
+
+// Phases: 0 = filling, 1 = testing, 2 = draining, 3 = held
+int phase = 0;
+
+int batchNo = 1;
+float chamberLitres = 0;
+bool batchToTank = false;
+float phSum = 0;
+float tdsSum = 0;
+int samples = 0;
+float batchPh = 7.0;
+float batchTds = 0;
+unsigned long phaseStart = 0;
+
+float tankLitres = 0;
+bool dosing = false;
+bool releasing = false;
+bool alarmEmpty = false;
+bool tankSafeTiming = false;
+unsigned long safeSince = 0;
+
+unsigned long lastTick = 0;
+unsigned long lastStatus = 0;
+
+float readPh(int pin) {
+  return analogRead(pin) * 14.0 / 1023.0;
+}
+
+float readTds(int pin) {
+  return analogRead(pin) * 2000.0 / 1023.0;
+}
+
+void logMsg(const char* msg) {
+  Serial.print("[");
+  Serial.print(millis() / 1000);
+  Serial.print(" s] ");
+  Serial.println(msg);
+}
+
+void startFilling() {
+  phase = 0;
+  chamberLitres = 0;
+  phSum = 0;
+  tdsSum = 0;
+  samples = 0;
+  digitalWrite(PIN_SUMP_PUMP, HIGH);
+  Serial.print("Batch ");
+  Serial.print(batchNo);
+  Serial.println(": pump ON, filling check chamber");
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(PIN_LEVEL, INPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
+  pinMode(PIN_SUMP_PUMP, OUTPUT);
+  pinMode(PIN_DOSE_PUMP, OUTPUT);
+  pinMode(PIN_LED_GREEN, OUTPUT);
+  pinMode(PIN_LED_RED, OUTPUT);
+  pinMode(PIN_LED_YELLOW, OUTPUT);
+
+  v1.attach(PIN_V1);
+  v2.attach(PIN_V2);
+  v3.attach(PIN_V3);
+  v1.write(VALVE_SHUT);
+  v2.write(VALVE_SHUT);
+  v3.write(VALVE_SHUT);
+
+  logMsg("AMD node started");
+  startFilling();
+}
+
+void runBatch(unsigned long now) {
+  if (phase == 0) {
+    chamberLitres = chamberLitres + LITRES_PER_TICK;
+    if (chamberLitres >= BATCH_LITRES) {
+      chamberLitres = BATCH_LITRES;
+      digitalWrite(PIN_SUMP_PUMP, LOW);
+      phase = 1;
+      phaseStart = now;
+      logMsg("100 L reached: pump OFF, testing batch");
+    }
+  }
+  else if (phase == 1) {
+    phSum = phSum + readPh(PIN_PH_CHAMBER);
+    tdsSum = tdsSum + readTds(PIN_TDS_CHAMBER);
+    samples = samples + 1;
+    if (now - phaseStart >= TEST_MS) {
+      batchPh = phSum / samples;
+      batchTds = tdsSum / samples;
+      bool pass = (batchPh >= PH_SAFE_MIN) && (batchTds <= TDS_SAFE_MAX);
+      batchToTank = !pass;
+
+      Serial.print("Batch ");
+      Serial.print(batchNo);
+      Serial.print(": pH ");
+      Serial.print(batchPh, 1);
+      Serial.print(", TDS ");
+      Serial.print(batchTds, 0);
+      if (pass) {
+        Serial.println(" -> PASS, V1 open to river");
+        v1.write(VALVE_OPEN);
+        phase = 2;
+      }
+      else if (tankLitres + BATCH_LITRES > TANK_CAPACITY) {
+        Serial.println(" -> FAIL, tank full, batch HELD");
+        phase = 3;
+      }
+      else {
+        Serial.println(" -> FAIL, V2 open to treatment tank");
+        v2.write(VALVE_OPEN);
+        phase = 2;
+      }
+    }
+  }
+  else if (phase == 3) {
+    if (tankLitres + BATCH_LITRES <= TANK_CAPACITY) {
+      v2.write(VALVE_OPEN);
+      phase = 2;
+      logMsg("Tank has space: sending held batch, V2 open");
+    }
+  }
+  else if (phase == 2) {
+    float q = 10.0;
+    if (chamberLitres < 10.0) {
+      q = chamberLitres;
+    }
+    chamberLitres = chamberLitres - q;
+    if (batchToTank) {
+      tankLitres = tankLitres + q;
+    }
+    if (chamberLitres <= 0) {
+      chamberLitres = 0;
+      v1.write(VALVE_SHUT);
+      v2.write(VALVE_SHUT);
+      batchNo = batchNo + 1;
+      startFilling();
+    }
+  }
+}
+
+void runTank(unsigned long now) {
+  float tankPh = readPh(PIN_PH_TANK);
+  bool neutraliserOk = (digitalRead(PIN_LEVEL) == HIGH);
+  bool inflowToTank = (phase == 2 && batchToTank);
+
+  bool needsDose = (tankLitres > 0) && (tankPh < TANK_RELEASE_PH);
+  bool shouldDose = needsDose && neutraliserOk;
+
+  if (shouldDose != dosing) {
+    dosing = shouldDose;
+    if (dosing) {
+      digitalWrite(PIN_DOSE_PUMP, HIGH);
+      logMsg("Tank pH acidic: dosing pump ON");
+    } else {
+      digitalWrite(PIN_DOSE_PUMP, LOW);
+      logMsg("Dosing pump OFF");
+    }
+  }
+
+  bool emptyNow = needsDose && !neutraliserOk;
+  if (emptyNow && !alarmEmpty) {
+    logMsg("LEVEL SENSOR: neutraliser EMPTY. Dosing stopped, V3 locked");
+  }
+  if (!emptyNow && alarmEmpty) {
+    logMsg("Level sensor OK again");
+  }
+  alarmEmpty = emptyNow;
+
+  bool canRelease = (tankLitres > 0) && !needsDose && !inflowToTank;
+  if (canRelease) {
+    if (!tankSafeTiming) {
+      tankSafeTiming = true;
+      safeSince = now;
+    }
+  } else {
+    tankSafeTiming = false;
+  }
+  bool shouldRelease = canRelease && (now - safeSince >= CONFIRM_MS);
+
+  if (shouldRelease != releasing) {
+    releasing = shouldRelease;
+    if (releasing) {
+      v3.write(VALVE_OPEN);
+      logMsg("Tank pH confirmed safe: V3 open, releasing");
+    } else {
+      v3.write(VALVE_SHUT);
+      logMsg("V3 shut");
+    }
+  }
+
+  if (releasing) {
+    tankLitres = tankLitres - 8.0;
+    if (tankLitres < 0) {
+      tankLitres = 0;
+    }
+  }
+}
+
+void updateOutputs() {
+  bool failing = (phase == 2 && batchToTank) || (phase == 3);
+  bool passing = (phase == 2 && !batchToTank) || releasing;
+  bool blink = ((millis() / 400) % 2) == 1;
+
+  digitalWrite(PIN_LED_RED, failing ? HIGH : LOW);
+  digitalWrite(PIN_LED_GREEN, passing ? HIGH : LOW);
+
+  if (alarmEmpty) {
+    digitalWrite(PIN_LED_YELLOW, blink ? HIGH : LOW);
+  } else {
+    digitalWrite(PIN_LED_YELLOW, (phase == 1) ? HIGH : LOW);
+  }
+
+  if (failing || alarmEmpty) {
+    if (blink) {
+      tone(PIN_BUZZER, 1000);
+    } else {
+      tone(PIN_BUZZER, 700);
+    }
+  } else {
+    noTone(PIN_BUZZER);
+  }
+}
+
+void printStatus(unsigned long now) {
+  if (now - lastStatus < 2000) {
+    return;
+  }
+  lastStatus = now;
+  Serial.print("  Status | batch ");
+  Serial.print(batchNo);
+  Serial.print(" | chamber ");
+  Serial.print((int)chamberLitres);
+  Serial.print(" L | tank ");
+  Serial.print((int)tankLitres);
+  Serial.print(" L | tank pH ");
+  Serial.print(readPh(PIN_PH_TANK), 1);
+  Serial.print(" | neutraliser ");
+  Serial.println(digitalRead(PIN_LEVEL) == HIGH ? "OK" : "EMPTY");
+}
+
+void loop() {
+  unsigned long now = millis();
+  if (now - lastTick < TICK_MS) {
+    return;
+  }
+  lastTick = now;
+
+  runBatch(now);
+  runTank(now);
+  updateOutputs();
+  printStatus(now);
+}
