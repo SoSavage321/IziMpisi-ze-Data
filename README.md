@@ -3,7 +3,11 @@
 **Acid mine drainage, tested before release.**
 MICTSETA Digital-to-Physical hackathon · Mpumalanga, South Africa
 
-**Live:** https://izimpisi-ze-data.web.app
+- **Live (deployed):** https://izimpisi-ze-data.web.app — the hosted build on Firebase Hosting,
+  backed by the real Firebase project.
+- **Local (development):** http://localhost:5173 — your working copy, after `npm install && npm run dev`.
+  Same dashboard, but with no backend configured it runs against the in-browser simulation
+  rather than live devices.
 
 Mine water is caught in 100 L batches and tested **before** any of it reaches the river. Bad water is
 trapped in the check chamber instead of being found downstream after it has already done damage.
@@ -143,6 +147,11 @@ port). Change a rule in one, change it in the other, and run `npm test`.
 npm install
 npm run dev
 ```
+
+Then open **http://localhost:5173**. Vite also prints a *Network* address (`http://<your-LAN-IP>:5173`)
+because the dev server binds every interface — that is the one to open on a phone on the same Wi-Fi.
+Neither is the deployed site: the hosted build lives at https://izimpisi-ze-data.web.app and talks to
+the real Firebase project, while localhost is your working copy.
 
 With no backend configured the dashboard runs against an **in-browser simulation** that uses
 the real controller and the real alarm rules. Seven days of history are generated at load, three
