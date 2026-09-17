@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "AMD test-before-release water system \u2014 operations dashboard, device API, firmware and simulator",
+  "description": "AMD test-before-release water system — operations dashboard, device API, firmware and simulator",
   "scripts": {
     "dev": "vite",
     "build": "npm run sync:shared -- --check && tsc --noEmit && vite build",
