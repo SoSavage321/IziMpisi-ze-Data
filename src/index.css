@@ -157,6 +157,10 @@ h1, h2, h3 { letter-spacing: -0.011em; }
 }
 ::-webkit-scrollbar-thumb:hover { background: rgb(var(--muted) / 0.6); }
 
+/* The light thumb reads as a bright pill against the navy rail — scroll without it. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important;

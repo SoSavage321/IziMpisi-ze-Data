@@ -241,7 +241,7 @@ function Rail({ role, fleet, onSignOut, userName, onClose }: {
         ) : null}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="Sections">
+      <nav className="no-scrollbar flex-1 overflow-y-auto px-3 pb-4" aria-label="Sections">
         {NAV.map((group) => {
           const items = group.items.filter((i) => !i.adminOnly || role === 'admin');
           if (!items.length) return null;
