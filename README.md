@@ -3,7 +3,7 @@
 **Acid mine drainage, tested before release.**
 MICTSETA Digital-to-Physical hackathon · Mpumalanga, South Africa
 
-**Live:** https://izimpisi-ze-data.web.app
+**Live:** https://izimpisi-ze-data.web.app/?demo
 
 The deployed build runs the **in-browser simulation**, not a backend — Firebase gets connected
 later. Sign in with one of the demo accounts listed on the login page (tap one to fill the form,
@@ -562,7 +562,7 @@ preferences, missing only the provider request. Email through Resend is implemen
 board, and the pin map in `hardware.h` is marked `TODO: confirm` throughout. Check it against your
 own board before energising anything.
 
-**Deployed:** the dashboard is live on Firebase Hosting at https://izimpisi-ze-data.web.app, with
+**Deployed:** the dashboard is live on Firebase Hosting at https://izimpisi-ze-data.web.app/?demo, with
 Firestore rules, Firestore indexes and Realtime Database rules all released to the
 `izimpisi-ze-data` project.
 
