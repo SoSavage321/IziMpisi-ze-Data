@@ -28,6 +28,49 @@ controller believes is unsafe. When the network drops, the plant carries on doin
 
 ---
 
+## What is in it
+
+Sixteen screens, a device API, firmware and a simulator. Grouped by who uses them:
+
+| | Screen | What it is for |
+|---|---|---|
+| **Operate** | Fleet | One card per controller: state, neutraliser level, litres to the river today and litres kept out of it |
+| | Live view | The plant right now — 3D twin or schematic, valve positions, pH band, the two 3-second countdowns, live charts |
+| | Controls | Emergency stop, mode, manual valves and pumps. Every action is a *request*; the device's accepted/rejected answer is shown verbatim |
+| | Alarms | Active and historical, acknowledged with a note, escalating after ten minutes |
+| | Shift log | Handover notes with an automatic summary of the shift's batches and alarms |
+| **Account for** | Batches | Every 100 L batch ever tested, searchable, with per-batch drill-down and CSV export |
+| | Batch detail | The readings that decided it, the telemetry during it, and the treatment cycle that dealt with it |
+| | Analytics | Pass rate, volumes released against blocked, pH/TDS distributions, failure causes, chemical cost |
+| | Compliance | PDF and CSV reports whose headline statement is *computed* from the records, not asserted |
+| **Maintain** | Maintenance | Calibration schedule, before/after probe values, duty counters derived from telemetry |
+| | Inventory | Neutraliser stock, real consumption rate, days until empty, deliveries |
+| | Settings | Discharge limits with validation, impact warnings, a required reason and versioning; devices; people; sites |
+| | Audit | Who changed what, written by database triggers with a field-level diff |
+| **Understand** | Simulation | An interactive node: contaminate it, starve it of neutraliser, cut its Wi-Fi |
+| | How it works | The seven steps, the interlocks, and the known limitations with open/closed status |
+| | Login | Role-aware: viewer reads, operator runs the plant, admin manages limits and people |
+
+Behind those: a **batch state machine** with 79 unit tests, a **server-side alarm engine**, **row-level
+security** scoped per organisation, **ESP32 firmware** whose control loop never waits on the network,
+and a **simulator** with seven fault scenarios.
+
+---
+
+## Tech stack
+
+| Layer | Built with |
+|---|---|
+| Dashboard | Vite · React 18 · TypeScript · Tailwind · TanStack Query · React Router · Recharts |
+| 3D twin | three.js, lazy-loaded in its own chunk |
+| Backend | Supabase — Postgres, Auth, Row Level Security, Realtime, Edge Functions (Deno) |
+| Reports | jsPDF + autotable (PDF), native CSV with a UTF-8 BOM |
+| Firmware | ESP32 Arduino C++ — WiFi, HTTPClient, Preferences (NVS) |
+| Shared core | Dependency-free TypeScript, run by the browser, Deno, Node and mirrored in C++ |
+| Tests | Vitest |
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -371,6 +414,59 @@ to the call site.
 Telemetry arrives every 5 s: about 17,000 rows per device per day. Policy is **30 days raw, then
 hourly aggregates forever** (`downsample_telemetry()`). Batches, treatment cycles, alarms, events and
 the audit log are compliance records and are never downsampled or deleted.
+
+---
+
+## Design system
+
+Deep Blue + Teal. Navy chrome against a light working area, white cards, teal for action.
+
+| Role | Colour | Hex |
+|---|---|---|
+| Primary | Deep navy | `#0B1F33` |
+| Secondary | Water blue | `#087EA4` |
+| Accent | Teal | `#14B8A6` |
+| Background | Very light blue | `#F4F9FB` |
+| Cards | White | `#FFFFFF` |
+| Text | Dark slate | `#172B3A` |
+| Normal | Green | `#22C55E` |
+| Warning | Amber | `#F59E0B` |
+| Critical | Red | `#EF4444` |
+
+Everything is a CSS custom property in `src/index.css`, surfaced to Tailwind in `tailwind.config.ts`,
+so both themes swap in one place.
+
+Three rules run through the whole interface:
+
+- **Colour never carries meaning alone.** Every status has an icon and a word beside it. Roughly one
+  man in twelve has some form of colour vision deficiency, and this is read on a phone in sunlight.
+- **Status colours have a second, darker `-ink` step for text.** `#22C55E` on white is 2.3:1 and
+  illegible as a label, so the bright colour stays on the dot or the bar and the readable step carries
+  the words.
+- **Units are always shown, and estimates are marked.** A bare number on a control screen is a hazard,
+  and every volume carries an asterisk until a device reports a real flow meter.
+
+---
+
+## Project status
+
+This was built for a hackathon and is honest about its edges.
+
+**Working end to end:** the dashboard (in demo mode with no backend, or against Supabase), the shared
+controller with 79 passing tests, the simulator across all seven scenarios, the schema and RLS, the
+edge functions, and the firmware modules.
+
+**Stubbed, deliberately:** SMS and WhatsApp notifications — wired to the call site and to per-user
+preferences, missing only the provider request. Email through Resend is implemented.
+
+**Not yet verified against hardware:** the firmware compiles as written but has not been flashed to a
+board, and the pin map in `hardware.h` is marked `TODO: confirm` throughout. Check it against your
+own board before energising anything.
+
+**Not yet deployed:** the migrations and edge functions have not been run against a live Supabase
+project. That is the first thing to try.
+
+License: not yet chosen.
 
 ---
 
