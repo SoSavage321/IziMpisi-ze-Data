@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ExternalLink, TriangleAlert } from 'lucide-react';
 import { Logo } from '../components/shell.tsx';
 import { useAuth } from '../hooks/auth.tsx';
-import { isDemo } from '../lib/supabase.ts';
+import { isDemo } from '../lib/api.ts';
+import { isFirebase } from '../lib/firebase.ts';
+import { firebaseAuthReadiness, type AuthReadiness } from '../lib/backend-firebase.ts';
 import { DEMO_USERS } from '../lib/demo.ts';
 import { Button, Card, Field, Input } from '../components/ui.tsx';
 
@@ -11,6 +14,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** A fresh Firebase project has no Authentication config until somebody
+   *  opens the console once, so check before the operator wastes a login. */
+  const [readiness, setReadiness] = useState<AuthReadiness | null>(null);
+
+  useEffect(() => {
+    if (!isFirebase) return;
+    firebaseAuthReadiness().then(setReadiness).catch(() => setReadiness({ ready: true }));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,6 +50,41 @@ export default function Login() {
         </div>
 
         <Card>
+        {readiness && !readiness.ready ? (
+          <div className="mb-5 rounded-xl border border-warn/40 bg-warn/5 p-4">
+            <div className="flex gap-3">
+              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-warn-ink" aria-hidden />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">
+                  {readiness.reason === 'not-provisioned'
+                    ? 'Authentication is not switched on yet'
+                    : 'Email sign-in is switched off'}
+                </p>
+                <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+                  {readiness.reason === 'not-provisioned'
+                    ? 'This Firebase project has never had its Authentication service started, so no one can sign in yet. It is a one-time click and there is no API for it on the free plan.'
+                    : 'The project has Authentication, but the Email/Password provider is disabled.'}
+                </p>
+                <ol className="mt-2.5 space-y-1 text-[13px] text-ink-2">
+                  <li>1. Open the Authentication page below</li>
+                  <li>2. Click <strong className="font-medium text-ink">Get started</strong> if it appears</li>
+                  <li>3. Choose <strong className="font-medium text-ink">Email/Password</strong>, turn on the first toggle, and save</li>
+                  <li>4. Come back here and reload</li>
+                </ol>
+                <a
+                  href={`https://console.firebase.google.com/project/${readiness.projectId}/authentication/providers`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-medium text-ink shadow-xs hover:bg-raised"
+                >
+                  Open Firebase Authentication
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                </a>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
           <form onSubmit={submit} className="space-y-4">
             <Field label="Email" htmlFor="email">
               <Input id="email" type="email" autoComplete="username" required

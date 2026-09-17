@@ -97,14 +97,31 @@ export const firebaseAuthApi = {
       await signInWithEmailAndPassword(fbAuth(), email.trim(), password);
     } catch (e) {
       const code = (e as { code?: string }).code ?? '';
-      if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
-        throw new Error('That email and password do not match an account.');
+
+      // A brand-new Firebase project has no Authentication config at all until
+      // somebody opens the console once. The raw code is meaningless to an
+      // operator, so say what to do about it.
+      if (code.includes('configuration-not-found')) {
+        throw new Error(
+          'Authentication has not been switched on for this Firebase project yet. ' +
+          'Open the Firebase console, go to Authentication, click Get started, ' +
+          'and enable the Email/Password provider.',
+        );
       }
       if (code.includes('operation-not-allowed')) {
         throw new Error(
-          'Email sign-in is not switched on for this Firebase project yet. ' +
-          'Enable it under Authentication in the Firebase console.',
+          'Email and password sign-in is switched off for this Firebase project. ' +
+          'Enable it under Authentication, Sign-in method in the Firebase console.',
         );
+      }
+      if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
+        throw new Error('That email and password do not match an account.');
+      }
+      if (code.includes('network-request-failed')) {
+        throw new Error('Could not reach Firebase. Check the connection and try again.');
+      }
+      if (code.includes('too-many-requests')) {
+        throw new Error('Too many attempts. Wait a minute and try again.');
       }
       throw new Error((e as Error).message);
     }
@@ -115,6 +132,51 @@ export const firebaseAuthApi = {
 
   async signOut() { await fbSignOut(fbAuth()); },
 };
+
+export type AuthReadiness =
+  | { ready: true }
+  | { ready: false; reason: 'not-provisioned' | 'provider-disabled'; projectId: string };
+
+/**
+ * Is Firebase Authentication actually usable on this project?
+ *
+ * `accounts:createAuthUri` is the cheapest call that touches the project's auth
+ * configuration, and it needs no credentials. A fresh project answers
+ * CONFIGURATION_NOT_FOUND until somebody opens the Authentication page in the
+ * console once — there is no API that provisions it on the free plan, so the
+ * login screen has to explain the click rather than show an error code.
+ */
+export async function firebaseAuthReadiness(): Promise<AuthReadiness> {
+  const key = import.meta.env.VITE_FIREBASE_API_KEY as string;
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID as string;
+  if (!key) return { ready: true };
+
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: 'probe@waterguard.invalid', continueUri: window.location.origin }),
+      },
+    );
+    if (res.ok) return { ready: true };
+
+    const body = await res.json().catch(() => ({}));
+    const message = String(body?.error?.message ?? '');
+    if (message.includes('CONFIGURATION_NOT_FOUND')) {
+      return { ready: false, reason: 'not-provisioned', projectId };
+    }
+    if (message.includes('OPERATION_NOT_ALLOWED')) {
+      return { ready: false, reason: 'provider-disabled', projectId };
+    }
+    // Anything else (a bad probe identifier, rate limiting) is not a setup
+    // problem; let the real sign-in attempt speak for itself.
+    return { ready: true };
+  } catch {
+    return { ready: true };
+  }
+}
 
 // ------------------------------------------------------------------ data ---
 
