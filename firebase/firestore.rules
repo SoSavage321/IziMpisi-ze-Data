@@ -1,0 +1,192 @@
+rules_version = '2';
+
+// ============================================================================
+// Firestore security rules — the Firebase equivalent of the Postgres RLS.
+//
+// Same three rules as the SQL version:
+//   viewer   reads everything in their organisation, changes nothing
+//   operator + acknowledges alarms, sends commands, writes logs and stock
+//   admin    + manages devices, people, sites and discharge limits
+//
+// Role and organisation come from custom claims on the user's token, set by
+// an admin (see functions/src/admin.ts or scripts/seed-firebase.ts). Claims are
+// used rather than a profile lookup because a rule that reads another document
+// costs a read on every single request and can be raced.
+//
+// Devices never authenticate as users and never touch Firestore directly under
+// these rules — the device path is the Realtime Database, which has its own
+// rules file scoped per device.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------- helpers ---
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function claims() {
+      return request.auth.token;
+    }
+
+    function myOrg() {
+      return signedIn() ? claims().get('orgId', '') : '';
+    }
+
+    function role() {
+      return signedIn() ? claims().get('role', 'viewer') : 'none';
+    }
+
+    function isAdmin()   { return role() == 'admin'; }
+    function canOperate(){ return role() == 'admin' || role() == 'operator'; }
+
+    // Every record carries orgId so a read can be authorised without a lookup.
+    function inMyOrg(doc) {
+      return doc.orgId == myOrg() && myOrg() != '';
+    }
+    function writingToMyOrg() {
+      return request.resource.data.orgId == myOrg() && myOrg() != '';
+    }
+
+    // Only these fields may change when an operator acknowledges an alarm.
+    function onlyAcknowledging() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['acknowledgedBy', 'acknowledgedAt', 'ackNote']);
+    }
+
+    // --------------------------------------------------------- tenancy ---
+    match /orgs/{orgId} {
+      allow read: if signedIn() && orgId == myOrg();
+      allow write: if false;                     // created by the seed/admin tooling
+    }
+
+    match /sites/{siteId} {
+      allow read:   if signedIn() && inMyOrg(resource.data);
+      allow create: if isAdmin() && writingToMyOrg();
+      allow update: if isAdmin() && inMyOrg(resource.data) && writingToMyOrg();
+      allow delete: if isAdmin() && inMyOrg(resource.data);
+    }
+
+    match /devices/{deviceId} {
+      allow read:   if signedIn() && inMyOrg(resource.data);
+      // apiKeyHash is written server-side only; a client may never set it.
+      allow create: if isAdmin() && writingToMyOrg()
+                    && !('apiKeyHash' in request.resource.data);
+      allow update: if isAdmin() && inMyOrg(resource.data)
+                    && request.resource.data.apiKeyHash == resource.data.apiKeyHash;
+      allow delete: if isAdmin() && inMyOrg(resource.data);
+    }
+
+    match /profiles/{userId} {
+      allow read: if signedIn() && inMyOrg(resource.data);
+      // A user may edit their own name and phone but never their own role.
+      allow update: if signedIn() && userId == request.auth.uid
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.orgId == resource.data.orgId;
+      allow create, delete: if isAdmin() && writingToMyOrg();
+    }
+
+    // ------------------------------------------------- discharge limits ---
+    // Versions are append-only: history is never rewritten, because the
+    // compliance report has to be able to say which limits were in force.
+    match /deviceConfig/{configId} {
+      allow read:   if signedIn() && inMyOrg(resource.data);
+      allow create: if isAdmin() && writingToMyOrg()
+                    && request.resource.data.reason is string
+                    && request.resource.data.reason.size() >= 10;
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------- device-authored records ---------
+    // Written by the device (through a function or the admin SDK) and by the
+    // device's own Firestore writes. Never editable from the dashboard: the
+    // batch register is evidence, not a document.
+    match /batches/{batchId} {
+      allow read: if signedIn() && inMyOrg(resource.data);
+      allow write: if false;
+    }
+    match /cycles/{cycleId} {
+      allow read: if signedIn() && inMyOrg(resource.data);
+      allow write: if false;
+    }
+    match /events/{eventId} {
+      allow read: if signedIn() && inMyOrg(resource.data);
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------- alarms ---
+    match /alarms/{alarmId} {
+      allow read: if signedIn() && inMyOrg(resource.data);
+      // Operators acknowledge. They cannot raise, clear, or edit an alarm —
+      // clearing is the engine's job once the condition goes away.
+      allow update: if canOperate() && inMyOrg(resource.data) && onlyAcknowledging();
+      allow create, delete: if false;
+    }
+
+    // --------------------------------------------------------- commands ---
+    // The dashboard only ever asks. The verdict is written by the device.
+    match /commands/{commandId} {
+      allow read: if signedIn() && inMyOrg(resource.data);
+      allow create: if canOperate() && writingToMyOrg()
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.requestedBy == request.auth.uid
+                    && (!(request.resource.data.type in ['APPLY_CONFIG', 'REQUEST_CALIBRATION_MODE'])
+                        || isAdmin());
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------ maintenance ---
+    match /maintenanceItems/{itemId} {
+      allow read:  if signedIn() && inMyOrg(resource.data);
+      allow write: if canOperate() && writingToMyOrg();
+    }
+    match /maintenanceLogs/{logId} {
+      allow read:   if signedIn() && inMyOrg(resource.data);
+      allow create: if canOperate() && writingToMyOrg()
+                    && request.resource.data.performedBy == request.auth.uid;
+      allow update, delete: if false;          // a maintenance record stands
+    }
+
+    // -------------------------------------------------------- inventory ---
+    match /inventory/{itemId} {
+      allow read:  if signedIn() && inMyOrg(resource.data);
+      allow write: if canOperate() && writingToMyOrg();
+    }
+    match /inventoryMovements/{movementId} {
+      allow read:   if signedIn() && inMyOrg(resource.data);
+      allow create: if canOperate() && writingToMyOrg()
+                    && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------- shift logs ---
+    match /shiftLogs/{logId} {
+      allow read:   if signedIn() && inMyOrg(resource.data);
+      allow create: if canOperate() && writingToMyOrg()
+                    && request.resource.data.author == request.auth.uid;
+      allow update: if signedIn() && inMyOrg(resource.data)
+                    && resource.data.author == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------- audit log ---
+    // Admins read it; nobody writes it from a client.
+    match /auditLog/{entryId} {
+      allow read:  if isAdmin() && inMyOrg(resource.data);
+      allow write: if false;
+    }
+
+    // ------------------------------------------- notification settings ---
+    match /notificationPrefs/{prefId} {
+      allow read, write: if signedIn()
+                         && request.auth.uid == prefId.split('_')[0]
+                         && writingToMyOrg();
+    }
+
+    // Anything not named above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "live": {
+      "$deviceId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $deviceId",
+        ".validate": "newData.hasChildren(['ts','state','ph','tds'])"
+      }
+    },
+
+    "telemetry": {
+      "$deviceId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $deviceId",
+        ".indexOn": ["ts"],
+        "$sampleId": {
+          ".validate": "newData.hasChildren(['ts','state'])"
+        }
+      }
+    },
+
+    "commands": {
+      "$deviceId": {
+        ".read": "auth != null",
+        "$commandId": {
+          ".write": "auth != null && (auth.uid == $deviceId || (!data.exists() && auth.token.role != null && auth.token.role != 'viewer'))",
+          ".validate": "newData.hasChildren(['type','status','createdAt'])",
+          "status": {
+            ".validate": "newData.val() == 'pending' || newData.val() == 'accepted' || newData.val() == 'rejected' || newData.val() == 'expired'"
+          },
+          "reason": {
+            ".write": "auth.uid == $deviceId"
+          }
+        }
+      }
+    },
+
+    "deviceConfig": {
+      "$deviceId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.token.role == 'admin'"
+      }
+    },
+
+    "presence": {
+      "$deviceId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $deviceId"
+      }
+    }
+  }
+}

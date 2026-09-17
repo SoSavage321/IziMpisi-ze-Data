@@ -6,8 +6,19 @@
  * shapes returned are identical in both.
  */
 
-import { isDemo, requireSupabase, supabase } from './supabase.ts';
+import { isDemo as supabaseUnconfigured, requireSupabase, supabase } from './supabase.ts';
+import { isFirebase } from './firebase.ts';
+import { firebaseApi, firebaseAuthApi, firebaseSubscribeLive } from './backend-firebase.ts';
 import { DEMO_SITES, DEMO_USERS, demoStore } from './demo.ts';
+
+/**
+ * Which backend is in play.
+ *
+ * Firebase wins when it is configured, then Supabase, and demo mode is the
+ * fallback so the dashboard always runs. Every page talks to `api` and never
+ * knows which of the three answered.
+ */
+export const isDemo = supabaseUnconfigured && !isFirebase;
 import type {
   Alarm, AuditRow, Batch, Command, DeviceConfig, DeviceEventRow, DutyCounters,
   FleetRow, InventoryItem, InventoryMovement, MaintenanceItem, MaintenanceLog,
@@ -28,6 +39,7 @@ export interface Session {
 
 export const auth = {
   async current(): Promise<Session | null> {
+    if (isFirebase) return firebaseAuthApi.current();
     if (isDemo) {
       try {
         const raw = localStorage.getItem(DEMO_SESSION_KEY);
@@ -48,6 +60,7 @@ export const auth = {
   },
 
   async signIn(email: string, password: string): Promise<Session> {
+    if (isFirebase) return firebaseAuthApi.signIn(email, password);
     if (isDemo) {
       const u = DEMO_USERS.find((x) => x.email === email.trim().toLowerCase());
       if (!u || password !== u.password) throw new Error('That email and password do not match a demo account.');
@@ -63,6 +76,7 @@ export const auth = {
   },
 
   async signOut() {
+    if (isFirebase) return firebaseAuthApi.signOut();
     if (isDemo) { localStorage.removeItem(DEMO_SESSION_KEY); return; }
     await requireSupabase().auth.signOut();
   },
@@ -72,6 +86,7 @@ export const auth = {
 
 export const api = {
   async sites(): Promise<Site[]> {
+    if (isFirebase) return firebaseApi.sites();
     if (isDemo) return DEMO_SITES;
     const { data, error } = await requireSupabase().from('sites').select('*').order('name');
     if (error) throw error;
@@ -79,6 +94,7 @@ export const api = {
   },
 
   async fleet(): Promise<FleetRow[]> {
+    if (isFirebase) return firebaseApi.fleet();
     if (isDemo) return demoStore.fleet();
     const { data, error } = await requireSupabase().from('v_fleet').select('*').order('site_name');
     if (error) throw error;
@@ -86,11 +102,13 @@ export const api = {
   },
 
   async device(deviceId: string): Promise<FleetRow | null> {
+    if (isFirebase) return firebaseApi.device(deviceId);
     const rows = await api.fleet();
     return rows.find((r) => r.device_id === deviceId) ?? null;
   },
 
   async telemetry(deviceId: string, minutes = 30): Promise<Telemetry[]> {
+    if (isFirebase) return firebaseApi.telemetry(deviceId, minutes);
     if (isDemo) return demoStore.telemetryFor(deviceId, minutes);
     const { data, error } = await requireSupabase()
       .from('telemetry').select('*')
@@ -103,6 +121,7 @@ export const api = {
 
   /** Why V3 is refusing to open, in the firmware's words. */
   async v3Lock(deviceId: string): Promise<string | null> {
+    if (isFirebase) return firebaseApi.v3Lock(deviceId);
     if (isDemo) return demoStore.v3Lock(deviceId);
     const { data } = await requireSupabase()
       .from('events').select('details')
@@ -112,6 +131,7 @@ export const api = {
   },
 
   async batches(opts: { deviceId?: string; from?: string; to?: string; limit?: number; result?: string } = {}): Promise<Batch[]> {
+    if (isFirebase) return firebaseApi.batches(opts);
     if (isDemo) {
       let rows = demoStore.batches.slice();
       if (opts.deviceId) rows = rows.filter((b) => b.device_id === opts.deviceId);
@@ -132,6 +152,7 @@ export const api = {
   },
 
   async cycles(opts: { deviceId?: string; from?: string; to?: string } = {}): Promise<TreatmentCycle[]> {
+    if (isFirebase) return firebaseApi.cycles(opts);
     if (isDemo) {
       let rows = demoStore.cycles.slice();
       if (opts.deviceId) rows = rows.filter((c) => c.device_id === opts.deviceId);
@@ -149,6 +170,7 @@ export const api = {
   },
 
   async alarms(opts: { deviceId?: string; activeOnly?: boolean; severity?: string; from?: string } = {}): Promise<Alarm[]> {
+    if (isFirebase) return firebaseApi.alarms(opts);
     const fleet = await api.fleet();
     const decorate = (a: Alarm): Alarm => {
       const d = fleet.find((f) => f.device_id === a.device_id);
@@ -175,6 +197,7 @@ export const api = {
   },
 
   async ackAlarm(id: string, note: string, userId: string): Promise<void> {
+    if (isFirebase) return firebaseApi.ackAlarm(id, note, userId);
     if (isDemo) {
       const a = demoStore.alarms.find((x) => x.id === id);
       if (a) {
@@ -198,6 +221,7 @@ export const api = {
   },
 
   async events(deviceId: string, limit = 100): Promise<DeviceEventRow[]> {
+    if (isFirebase) return firebaseApi.events(deviceId, limit);
     if (isDemo) {
       return demoStore.events.filter((e) => e.device_id === deviceId)
         .sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, limit);
@@ -212,6 +236,7 @@ export const api = {
   // ------------------------------------------------------------ commands ---
 
   async commands(deviceId: string, limit = 25): Promise<Command[]> {
+    if (isFirebase) return firebaseApi.commands(deviceId, limit);
     if (isDemo) {
       return demoStore.commands.filter((c) => c.device_id === deviceId)
         .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
@@ -228,6 +253,7 @@ export const api = {
    * firmware decides, and the answer comes back on the same row.
    */
   async sendCommand(deviceId: string, type: string, payload: Record<string, unknown>, userId: string): Promise<Command> {
+    if (isFirebase) return firebaseApi.sendCommand(deviceId, type, payload, userId);
     const row: Command = {
       id: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       device_id: deviceId, requested_by: userId,
@@ -251,6 +277,7 @@ export const api = {
   // -------------------------------------------------------------- config ---
 
   async configs(deviceId: string): Promise<DeviceConfig[]> {
+    if (isFirebase) return firebaseApi.configs(deviceId);
     if (isDemo) {
       return demoStore.configs.filter((c) => c.device_id === deviceId)
         .sort((a, b) => b.version - a.version);
@@ -263,6 +290,7 @@ export const api = {
   },
 
   async createConfig(deviceId: string, values: Partial<DeviceConfig>, reason: string, userId: string): Promise<DeviceConfig> {
+    if (isFirebase) return firebaseApi.createConfig(deviceId, values, reason, userId);
     if (isDemo) {
       const latest = demoStore.configs.filter((c) => c.device_id === deviceId).sort((a, b) => b.version - a.version)[0];
       const row: DeviceConfig = {
@@ -298,6 +326,7 @@ export const api = {
   // --------------------------------------------------------- maintenance ---
 
   async maintenance(deviceId?: string): Promise<MaintenanceItem[]> {
+    if (isFirebase) return firebaseApi.maintenance(deviceId);
     if (isDemo) {
       const rows = deviceId ? demoStore.maintenance.filter((m) => m.device_id === deviceId) : demoStore.maintenance;
       return rows.slice().sort((a, b) => (a.next_due_at ?? '').localeCompare(b.next_due_at ?? ''));
@@ -310,6 +339,7 @@ export const api = {
   },
 
   async maintenanceLogs(deviceId?: string): Promise<MaintenanceLog[]> {
+    if (isFirebase) return firebaseApi.maintenanceLogs(deviceId);
     if (isDemo) {
       const rows = deviceId ? demoStore.maintenanceLogs.filter((m) => m.device_id === deviceId) : demoStore.maintenanceLogs;
       return rows.slice().sort((a, b) => b.performed_at.localeCompare(a.performed_at));
@@ -325,6 +355,7 @@ export const api = {
     itemId: string | null; deviceId: string; notes: string;
     before: Record<string, unknown>; after: Record<string, unknown>; userId: string;
   }): Promise<void> {
+    if (isFirebase) return firebaseApi.logMaintenance(input);
     if (isDemo) {
       demoStore.maintenanceLogs.unshift({
         id: `ml-${Date.now()}`, item_id: input.itemId, device_id: input.deviceId,
@@ -348,6 +379,7 @@ export const api = {
   },
 
   async duty(deviceId: string): Promise<DutyCounters> {
+    if (isFirebase) return firebaseApi.duty(deviceId);
     if (isDemo) {
       // Derived from telemetry in SQL; approximated here from what the demo has run.
       const t = demoStore.telemetryFor(deviceId, 24 * 60);
@@ -378,6 +410,7 @@ export const api = {
   // ----------------------------------------------------------- inventory ---
 
   async inventory(): Promise<InventoryItem[]> {
+    if (isFirebase) return firebaseApi.inventory();
     if (isDemo) return demoStore.inventory;
     const { data, error } = await requireSupabase().from('inventory').select('*');
     if (error) throw error;
@@ -385,6 +418,7 @@ export const api = {
   },
 
   async movements(inventoryId?: string): Promise<InventoryMovement[]> {
+    if (isFirebase) return firebaseApi.movements(inventoryId);
     if (isDemo) {
       const rows = inventoryId ? demoStore.movements.filter((m) => m.inventory_id === inventoryId) : demoStore.movements;
       return rows.slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -397,6 +431,7 @@ export const api = {
   },
 
   async addMovement(inventoryId: string, delta: number, kind: string, note: string, userId: string): Promise<void> {
+    if (isFirebase) return firebaseApi.addMovement(inventoryId, delta, kind, note, userId);
     if (isDemo) {
       demoStore.movements.unshift({
         id: `mv-${Date.now()}`, inventory_id: inventoryId, delta, kind, note,
@@ -416,6 +451,7 @@ export const api = {
   // ---------------------------------------------------------- shift logs ---
 
   async shifts(siteId?: string): Promise<ShiftLog[]> {
+    if (isFirebase) return firebaseApi.shifts(siteId);
     if (isDemo) {
       const rows = siteId ? demoStore.shifts.filter((s) => s.site_id === siteId) : demoStore.shifts;
       return rows.slice().sort((a, b) => b.shift_start.localeCompare(a.shift_start));
@@ -428,6 +464,7 @@ export const api = {
   },
 
   async addShift(input: { siteId: string; notes: string; shiftStart: string; handoverTo: string | null; userId: string }): Promise<void> {
+    if (isFirebase) return firebaseApi.addShift(input);
     if (isDemo) {
       demoStore.shifts.unshift({
         id: `sh-${Date.now()}`, site_id: input.siteId, author: input.userId,
@@ -449,6 +486,7 @@ export const api = {
   // ---------------------------------------------------------- people, audit ---
 
   async profiles(): Promise<Profile[]> {
+    if (isFirebase) return firebaseApi.profiles();
     if (isDemo) return DEMO_USERS;
     const { data, error } = await requireSupabase().from('profiles').select('*').order('full_name');
     if (error) throw error;
@@ -456,6 +494,7 @@ export const api = {
   },
 
   async audit(opts: { table?: string; actor?: string; limit?: number } = {}): Promise<AuditRow[]> {
+    if (isFirebase) return firebaseApi.audit(opts);
     if (isDemo) {
       let rows = demoStore.audit.slice();
       if (opts.table) rows = rows.filter((r) => r.target_table === opts.table);
@@ -476,6 +515,7 @@ export const api = {
  * is a Realtime channel. Either way the caller just gets told to refetch.
  */
 export function subscribeLive(onChange: () => void): () => void {
+  if (isFirebase) return firebaseSubscribeLive(onChange);
   if (isDemo) return demoStore.subscribe(onChange);
 
   const db = supabase!;

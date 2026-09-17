@@ -17,6 +17,9 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = join(root, 'shared');
 const dest = join(root, 'supabase', 'functions', '_shared', 'lib');
+// Cloud Functions compile with tsc and emit real JS, so the copy there cannot
+// keep the explicit .ts import specifiers that Deno requires.
+const destFunctions = join(root, 'functions', 'src', 'shared');
 
 const BANNER = `// GENERATED FILE — do not edit.
 // Copied from /shared by scripts/sync-shared.mjs. Edit the original and run
@@ -26,20 +29,26 @@ const BANNER = `// GENERATED FILE — do not edit.
 
 const check = process.argv.includes('--check');
 mkdirSync(dest, { recursive: true });
+mkdirSync(destFunctions, { recursive: true });
 
 const files = readdirSync(src).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
 let stale = [];
 
 for (const file of files) {
-  const body = BANNER + readFileSync(join(src, file), 'utf8');
-  const target = join(dest, file);
-  let current = null;
-  try { current = readFileSync(target, 'utf8'); } catch { /* not there yet */ }
+  const raw = readFileSync(join(src, file), 'utf8');
 
-  if (current === body) continue;
-  if (check) { stale.push(file); continue; }
-  writeFileSync(target, body);
-  console.log(`synced ${file}`);
+  for (const [target, body] of [
+    [join(dest, file), BANNER + raw],
+    // strip the .ts specifiers for the tsc-compiled Functions copy
+    [join(destFunctions, file), BANNER + raw.replace(/from '\.\/([a-z]+)\.ts'/g, "from './$1'")],
+  ]) {
+    let current = null;
+    try { current = readFileSync(target, 'utf8'); } catch { /* not there yet */ }
+    if (current === body) continue;
+    if (check) { stale.push(`${file} -> ${target.includes('functions') ? 'functions' : 'supabase'}`); continue; }
+    writeFileSync(target, body);
+    console.log(`synced ${file} -> ${target.includes('functions') ? 'functions' : 'supabase'}`);
+  }
 }
 
 if (check && stale.length) {

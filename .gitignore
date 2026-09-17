@@ -12,3 +12,6 @@ coverage
 
 # firmware secrets — never commit a device key
 firmware/**/secrets.h
+
+# firebase local deploy cache
+.firebase/

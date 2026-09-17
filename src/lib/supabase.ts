@@ -13,6 +13,11 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
  * table actually needs. Set the two VITE_ variables and it switches to the
  * real backend with no code change.
  */
+/**
+ * True when Supabase itself is not configured. `api.ts` combines this with the
+ * Firebase check to decide the actual backend — do not import this directly to
+ * mean "demo mode".
+ */
 export const isDemo = !url || !anon;
 
 export const supabase: SupabaseClient | null = isDemo

@@ -1,7 +1,9 @@
-# WaterGuard
+# IziMpisi ze-Data · WaterGuard
 
 **Acid mine drainage, tested before release.**
 MICTSETA Digital-to-Physical hackathon · Mpumalanga, South Africa
+
+**Live:** https://izimpisi-ze-data.web.app
 
 Mine water is caught in 100 L batches and tested **before** any of it reaches the river. Bad water is
 trapped in the check chamber instead of being found downstream after it has already done damage.
@@ -63,7 +65,8 @@ and a **simulator** with seven fault scenarios.
 |---|---|
 | Dashboard | Vite · React 18 · TypeScript · Tailwind · TanStack Query · React Router · Recharts |
 | 3D twin | three.js, lazy-loaded in its own chunk |
-| Backend | Supabase — Postgres, Auth, Row Level Security, Realtime, Edge Functions (Deno) |
+| Backend | **Firebase** — Auth, Realtime Database, Firestore, Hosting, Cloud Functions |
+| Alternative backend | Supabase — Postgres, Auth, RLS, Realtime, Edge Functions (kept, optional) |
 | Reports | jsPDF + autotable (PDF), native CSV with a UTF-8 BOM |
 | Firmware | ESP32 Arduino C++ — WiFi, HTTPClient, Preferences (NVS) |
 | Shared core | Dependency-free TypeScript, run by the browser, Deno, Node and mirrored in C++ |
@@ -141,7 +144,7 @@ npm install
 npm run dev
 ```
 
-With no Supabase project configured the dashboard runs against an **in-browser simulation** that uses
+With no backend configured the dashboard runs against an **in-browser simulation** that uses
 the real controller and the real alarm rules. Seven days of history are generated at load, three
 devices run live, and commands you send are genuinely validated against the interlocks. Sign in with
 any of the demo accounts shown on the login page (password `demo1234`).
@@ -162,7 +165,10 @@ npm run sim       # the device simulator, printing to the terminal
 | `shared/` | The controller, alarm rules and report maths — **dependency-free**, unit-tested |
 | `simulator/` | N virtual devices running the shared controller against the real API |
 | `firmware/waterguard_esp32/` | The ESP32 sketch and its modules |
-| `supabase/migrations/` | Schema, RLS, triggers, views, retention |
+| `firebase/` | Firestore and Realtime Database security rules, Firestore indexes |
+| `functions/` | Cloud Functions — written, needs the Blaze plan to deploy |
+| `scripts/seed-firebase.ts` | Demo org, sites, devices, users and seven days of history |
+| `supabase/migrations/` | Schema, RLS, triggers, views, retention (alternative backend) |
 | `supabase/functions/` | `ingest`, `commands`, `escalate`, `register-device` |
 | `scripts/seed.ts` | Demo org, sites, devices, users and seven days of history |
 | `src/components/plant3d.tsx` | The 3D digital twin of the plant (three.js), lazy-loaded |
@@ -221,7 +227,83 @@ are driven by the *fraction* of capacity, so the numbers stay correct whatever t
 
 ---
 
-## Supabase setup
+## Firebase setup
+
+The project is live at **https://izimpisi-ze-data.web.app** on Firebase project `izimpisi-ze-data`.
+
+### Why two databases
+
+| | Holds | Why there |
+|---|---|---|
+| **Realtime Database** | live telemetry, device state, the command queue | A device reports every 5 s. Three devices is ~52,000 writes/day, far past Firestore's free 20,000, but nothing to RTDB, which bills bandwidth rather than writes. It also gives the ESP32 the simplest client possible: an authenticated REST `PUT`. |
+| **Firestore** | batches, cycles, alarms, config history, maintenance, stock, shift logs, audit | These are the records the compliance report is built from, and they need real queries — date ranges, ordering, filtering by result. |
+
+Security rules are in [`firebase/firestore.rules`](firebase/firestore.rules) and
+[`firebase/database.rules.json`](firebase/database.rules.json). They enforce the same three roles as
+the Postgres version: viewer reads, operator runs the plant, admin manages limits and people.
+Role and organisation come from **custom claims** on the user's token rather than a profile lookup,
+because a rule that reads another document costs a read on every request and can be raced.
+
+Devices never authenticate as users. Each controller has its own Firebase Auth account, and the
+device document id *is* that account's uid, so the RTDB rule `auth.uid == $deviceId` means a device
+can only ever write its own node.
+
+### Deploying
+
+```bash
+firebase login
+npm run deploy:rules        # firestore rules + indexes, RTDB rules
+npm run deploy              # build, then push to Firebase Hosting
+```
+
+### Seeding
+
+Creating users and setting custom claims is an admin operation, so it needs a service account key:
+
+1. Firebase console → Project settings → **Service accounts** → *Generate new private key*
+2. Save it **outside the repo**, then:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json     # macOS/Linux
+set GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\key.json      # Windows
+npm run seed:firebase
+```
+
+It prints one device account (id, email, password) per controller — those go into
+`firmware/waterguard_esp32/secrets.h`.
+
+### Two things that still need a click in the console
+
+Neither can be done from the CLI on the free Spark plan:
+
+1. **Turn on Email/Password sign-in.** Console → Authentication → *Get started* → Email/Password →
+   Enable. Until this is done, sign-in returns `CONFIGURATION_NOT_FOUND` and the seed cannot create
+   users. The admin API route for it requires billing, which is why it is not scripted.
+2. **Upgrade to Blaze, only if you want Cloud Functions.** Functions need Cloud Build, which requires
+   a billing account. Everything above — Auth, both databases, Hosting, the whole dashboard and the
+   device data path — works on the free Spark plan without it.
+
+### What Cloud Functions would add
+
+The functions in [`functions/`](functions/) are written but **not deployed**, because of the Blaze
+requirement. They are not needed for the system to run; they add:
+
+- server-side alarm evaluation, so alarms are raised even with no dashboard open
+- email, SMS and WhatsApp notifications, and the ten-minute escalation of unacknowledged criticals
+- minting device API keys from the Settings page
+
+Without them, the dashboard evaluates the alarm rules client-side using the same
+[`shared/alarms.ts`](shared/alarms.ts) — correct while somebody has it open, silent when nobody does.
+
+---
+
+## Supabase setup (alternative backend)
+
+Firebase is the primary backend. Supabase is kept in the repo as a working alternative — the data
+layer picks whichever is configured, falling back to the in-browser demo. Skip this section unless
+you want to run Postgres instead.
+
+
 
 1. **Create a project** at [supabase.com](https://supabase.com). Note the project URL, the `anon`
    key and the `service_role` key (Settings → API).
@@ -463,8 +545,16 @@ preferences, missing only the provider request. Email through Resend is implemen
 board, and the pin map in `hardware.h` is marked `TODO: confirm` throughout. Check it against your
 own board before energising anything.
 
-**Not yet deployed:** the migrations and edge functions have not been run against a live Supabase
-project. That is the first thing to try.
+**Deployed:** the dashboard is live on Firebase Hosting at https://izimpisi-ze-data.web.app, with
+Firestore rules, Firestore indexes and Realtime Database rules all released to the
+`izimpisi-ze-data` project.
+
+**Needs one console click:** Email/Password sign-in has to be switched on under Authentication before
+anyone can sign in or before the seed can create users. The API route for it requires billing.
+
+**Not deployed:** Cloud Functions, which need the Blaze plan for Cloud Build. The system runs without
+them; see the Firebase section for what they would add. The Supabase migrations have never been run
+against a live project either — that backend is the alternative, not the primary.
 
 License: not yet chosen.
 
