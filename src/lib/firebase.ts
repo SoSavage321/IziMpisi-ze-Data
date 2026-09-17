@@ -33,8 +33,17 @@ const config = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+/**
+ * Escape hatch. Setting VITE_USE_FIREBASE=false forces the in-browser demo
+ * even when real keys are present — useful while the project's Authentication
+ * is still being switched on, or for a demo that must not touch live data.
+ * Only the exact string "false" disables it, so a typo fails safe towards the
+ * real backend rather than silently showing simulated water.
+ */
+const firebaseEnabled = import.meta.env.VITE_USE_FIREBASE !== 'false';
+
 /** True when the app is configured to talk to a real Firebase project. */
-export const isFirebase = Boolean(config.apiKey && config.projectId && config.databaseURL);
+export const isFirebase = firebaseEnabled && Boolean(config.apiKey && config.projectId && config.databaseURL);
 
 let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
