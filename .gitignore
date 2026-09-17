@@ -9,3 +9,6 @@ dist-ssr
 !.vscode/extensions.json
 coverage
 .supabase
+
+# firmware secrets — never commit a device key
+firmware/**/secrets.h

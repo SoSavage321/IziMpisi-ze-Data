@@ -472,6 +472,13 @@ export class Controller {
   private stConfirm(_dt: number, i: SensorInputs) {
     this.shutAll();
     if (!this.inReleaseBand(i.tankPh)) { this.tStable = 0; this.go('TREAT'); return; }
+
+    // The band is only one of V3's conditions. If something else is holding it
+    // shut, say so now rather than counting down three seconds to a valve that
+    // was never going to open.
+    const blocked = this.v3Interlock(i);
+    if (blocked) { this.tStable = 0; this.lockout(blocked); return; }
+
     if (this.tStable === 0) this.tStable = this.clock;
     if (this.clock - this.tStable >= this.config.stableWindowS * 1000 * MS) this.go('RELEASE');
   }
@@ -483,7 +490,11 @@ export class Controller {
       this.setValve('v3', false);
       this.v3LockReason = blocked;
       this.emit('INTERLOCK_BLOCK', { valve: 'V3', reason: blocked });
-      this.go('TREAT');
+      // If the tank is already inside the band, more dosing cannot clear this
+      // block — an empty reservoir, say. Going back to TREAT would oscillate
+      // forever and never tell anyone. Lock out and raise it instead.
+      if (this.inReleaseBand(i.tankPh)) this.lockout(blocked);
+      else this.go('TREAT');
       return;
     }
     if (!this.out.v3) this.tankAtRelease = this.tankL;   // volume this cycle will release
@@ -507,11 +518,26 @@ export class Controller {
   private stLockout(_dt: number, i: SensorInputs) {
     this.shutAll();
     this.out.dosingPump = false; this.out.acidPump = false;
-    const stillBad =
-      (i.tankPh < this.aimLo && i.neutraliserPct <= 0) ||
-      (i.tankPh > this.aimHi && !this.opts.hasAcidTrim) ||
-      this.pulses >= this.opts.maxPulses;
-    if (!stillBad) { this.lockoutReason = null; this.pulses = 0; this.go('TREAT'); }
+
+    // Can the tank be released as it stands?
+    if (this.tankL > 0 && this.v3Interlock(i) === null) {
+      this.lockoutReason = null;
+      this.pulses = 0;
+      this.tStable = 0;
+      this.go('CONFIRM');
+      return;
+    }
+
+    // Or can dosing move it back into the band?
+    const canDoseUp = i.tankPh < this.aimLo && i.neutraliserPct > 0;
+    const canDoseDown = i.tankPh > this.aimHi && this.opts.hasAcidTrim;
+    if ((canDoseUp || canDoseDown) && this.pulses < this.opts.maxPulses) {
+      this.lockoutReason = null;
+      this.go('TREAT');
+      return;
+    }
+
+    // Otherwise stay locked, siren on, and wait for a person.
   }
 
   // ------------------------------------------------------------- plumbing ---

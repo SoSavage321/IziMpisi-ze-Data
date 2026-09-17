@@ -1,79 +1,338 @@
-# Kusile WaterGuard
+# WaterGuard
 
-Mine water is caught in 100 L batches and tested **before** any of it reaches the river.
-Bad water is trapped in the check chamber instead of being found after it has already
-caused damage.
+**Acid mine drainage, tested before release.**
+MICTSETA Digital-to-Physical hackathon · Mpumalanga, South Africa
 
-## The pass rule
+Mine water is caught in 100 L batches and tested **before** any of it reaches the river. Bad water is
+trapped in the check chamber instead of being found downstream after it has already done damage.
 
-A batch is released to the river only if it is inside the band on **both** sides:
+```
+PASS  ==  6.5 ≤ pH ≤ 8.5   AND   TDS ≤ 1200 mg/L
+```
 
-| Measurement | Pass condition |
-|---|---|
-| pH | **6.5 ≤ pH ≤ 8.5** |
-| TDS | ≤ 1,200 mg/L |
+Both edges of the pH band are enforced in firmware. Alkaline water is a pollution event in the same
+way acid water is, and an over-dosed batch must not be able to walk out of valve V3 just because it
+is no longer acidic.
 
-The upper pH limit is new. The first build only had a floor, so alkaline water — including
-water the plant itself had over-dosed during treatment — could walk straight out of valve V1
-or V3. Alkaline discharge is a pollution event in the same way acid discharge is, so every
-gate in the controller is now two-sided. One function, `inPhBand()`, answers the question
-everywhere, so the ceiling cannot be enforced in one branch and forgotten in another.
+---
 
-## How it works
+## The one thing to understand
 
-1. **Fill** — the sump pump fills the check chamber to 100 L.
-2. **Test** — the controller averages pH and TDS over 3 seconds.
-3. **Decide** —
-   - inside the band → **V1** sends the batch to the river.
-   - outside the band, either side → **V2** sends it to the treatment tank. If the tank is
-     full, the batch is held in the chamber.
-4. **Treat** — dosing aims at the **middle** of the band (6.8–7.8), not at its edge. Alkali
-   is added in fixed slugs with a mixing pause between each, and an acid trim pump pulls the
-   tank back down if it overshoots. Aiming at 6.8 with continuous dosing was exactly what
-   pushed batches past 8.5.
-5. **Release** — **V3** opens only after the tank has held a pH inside 6.5–8.5 for 3 seconds,
-   and it re-checks every tick: a mid-release drift shuts the valve again.
+**The ESP32 is the authority on safety. The dashboard can only ask.**
 
-## Built-in safety
+Pressing a button in the dashboard writes a row into a `commands` table. The controller polls that
+table, validates the request against its own interlocks and its own live sensor readings, and answers
+`accepted` or `rejected` with a reason — which the dashboard shows word for word, including the
+refusals. No action in the interface, by any user, at any role, can put water in the river that the
+controller believes is unsafe. When the network drops, the plant carries on doing all of this without us.
 
-- If a reagent runs out, the release valve stays locked and the siren sounds.
-- V3 never opens while failed water is still flowing into the tank (V2 open ⇒ V3 shut).
-- A dose limit per batch trips a lockout rather than dosing forever.
-- Status lights: green = pass, red = fail or lockout, yellow = testing, treating, or reagent empty.
+---
 
-## Real device vs demo
+## Architecture
 
-| Real device | Demo replacement |
-|---|---|
-| ESP32 controller | Arduino Uno |
-| pH and TDS probes | Potentiometers |
-| Solenoid valves V1, V2, V3 | Micro servos (0° shut, 90° open) |
-| Sump, dosing and acid trim pumps | DC motors |
-| Flow meter | Litres counted in code |
-| WiFi and 3D twin | Serial Monitor + the dashboard |
+```mermaid
+flowchart LR
+  subgraph Plant["Physical plant"]
+    SUMP[Sump pump] --> CH[Check chamber<br/>100 L batch]
+    CH -->|V1 pass| RIVER[(River)]
+    CH -->|V2 fail| TANK[Treatment tank]
+    DOSE[Dosing pump<br/>+ acid trim] --> TANK
+    TANK -->|V3 after 3 s stable| RIVER
+  end
+
+  subgraph Device["ESP32 controller"]
+    HAL[hardware.cpp<br/>pins, probes]
+    CTRL[controller.cpp<br/>state machine<br/>+ interlocks]
+    CFG[config.cpp<br/>NVS thresholds]
+    RING[telemetry.cpp<br/>200-sample ring buffer]
+    CMD[command_client.cpp<br/>poll · validate · ack]
+    WIFI[wifi_manager.cpp<br/>backoff]
+  end
+
+  Plant <--> HAL --> CTRL
+  CFG --> CTRL
+  CTRL --> RING
+  CMD --> CTRL
+
+  subgraph Supabase["Supabase"]
+    ING["/ingest<br/>edge function"]
+    COM["/commands<br/>/commands/ack"]
+    ESC["/escalate<br/>scheduled"]
+    REG["/register-device"]
+    PG[(Postgres<br/>+ RLS + Realtime)]
+    ALARM{{Alarm rules}}
+  end
+
+  RING -->|POST batch| ING
+  CMD -->|GET / POST ack| COM
+  ING --> ALARM --> PG
+  ING --> PG
+  COM --> PG
+  ESC --> PG
+
+  subgraph Dash["Dashboard — React + Vite"]
+    LIVE[Live view]
+    CONTROLS[Controls]
+    ALARMS[Alarms]
+    REPORTS[Compliance reports]
+  end
+
+  PG <-->|Realtime + RLS| Dash
+  CONTROLS -->|writes a REQUEST| COM
+
+  SIM[Simulator<br/>N virtual devices] -.same API.-> ING
+  SHARED[/shared/controller.ts<br/>78 unit tests/] -.ported to.-> CTRL
+  SHARED --> SIM
+```
+
+The state machine exists once as a specification and twice as code: `shared/controller.ts` (tested,
+and what the simulator and the browser demo run) and `firmware/.../controller.cpp` (a line-for-line
+port). Change a rule in one, change it in the other, and run `npm test`.
+
+---
+
+## Quick start — no backend needed
+
+```bash
+npm install
+npm run dev
+```
+
+With no Supabase project configured the dashboard runs against an **in-browser simulation** that uses
+the real controller and the real alarm rules. Seven days of history are generated at load, three
+devices run live, and commands you send are genuinely validated against the interlocks. Sign in with
+any of the demo accounts shown on the login page (password `demo1234`).
+
+```bash
+npm test          # 78 unit tests: state machine, interlocks, alarm rules, report maths
+npm run build     # typecheck, verify the vendored copies, production build
+npm run sim       # the device simulator, printing to the terminal
+```
+
+---
 
 ## Repository
 
-- [`firmware/waterguard/waterguard.ino`](firmware/waterguard/waterguard.ino) — the controller.
-  Serial Monitor keys during a demo: `o` forces an over-dose, `n` normalises the tank, `r`
-  resets the counters.
-- [`dashboard/index.html`](dashboard/index.html) — the control-room dashboard. It runs the
-  same state machine in the browser, so it demonstrates the plant with no hardware attached,
-  and it will replay real telemetry pasted from the Serial Monitor.
+| Path | What it is |
+|---|---|
+| `src/` | The dashboard: React + TypeScript + Tailwind, TanStack Query, Recharts |
+| `shared/` | The controller, alarm rules and report maths — **dependency-free**, unit-tested |
+| `simulator/` | N virtual devices running the shared controller against the real API |
+| `firmware/waterguard_esp32/` | The ESP32 sketch and its modules |
+| `supabase/migrations/` | Schema, RLS, triggers, views, retention |
+| `supabase/functions/` | `ingest`, `commands`, `escalate`, `register-device` |
+| `scripts/seed.ts` | Demo org, sites, devices, users and seven days of history |
+| `dashboard/index.html` | The original standalone bench demo, kept for the Tinkercad rig |
 
-## Telemetry format
+`shared/` is vendored into `supabase/functions/_shared/lib/` by `npm run sync:shared`, because the
+Supabase CLI only bundles files under `supabase/functions`. `npm run build` fails if the copies are
+stale, so the two cannot drift.
 
-The controller prints one CSV line every 500 ms. The dashboard parses exactly this:
+---
 
+## Supabase setup
+
+1. **Create a project** at [supabase.com](https://supabase.com). Note the project URL, the `anon`
+   key and the `service_role` key (Settings → API).
+
+2. **Run the migrations**, in order, in the SQL editor — or with the CLI:
+
+   ```bash
+   supabase link --project-ref YOUR-REF
+   supabase db push
+   ```
+
+   `0001_schema.sql` → `0002_rls.sql` → `0003_triggers.sql` → `0004_views.sql` → `0005_retention.sql`
+
+3. **Deploy the edge functions:**
+
+   ```bash
+   npm run sync:shared
+   supabase functions deploy ingest
+   supabase functions deploy commands
+   supabase functions deploy escalate
+   supabase functions deploy register-device
+   supabase secrets set RESEND_API_KEY=re_... ALARM_FROM_EMAIL=waterguard@yourdomain.co.za PUBLIC_APP_URL=https://your-app.vercel.app
+   ```
+
+4. **Schedule the housekeeping.** Enable `pg_cron` and `pg_net`, then run the block at the bottom of
+   `0005_retention.sql`: expiring stale commands, marking devices offline, nightly downsampling, and
+   the alarm escalation function.
+
+5. **Seed it:**
+
+   ```bash
+   SUPABASE_URL=https://YOUR.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJ... npm run seed
+   ```
+
+   It prints one API key per device. **They are shown once.** Copy one into the firmware or give it
+   to the simulator.
+
+6. **Point the dashboard at it.** Copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY`. The app switches from demo mode to the real backend with no code change.
+
+### Environment variables
+
+| Variable | Where | What for |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | frontend | Safe in the browser: every table is behind RLS |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | seed script, edge functions | **Never** ship to the browser |
+| `RESEND_API_KEY`, `ALARM_FROM_EMAIL` | edge functions | Alarm email |
+| `PUBLIC_APP_URL` | edge functions | Deep links in notifications |
+| `WATERGUARD_API_BASE`, `WATERGUARD_DEVICE_KEY` | simulator | Talking to the real API |
+
+---
+
+## Deploying the dashboard
+
+**Vercel:** import the repo, framework preset *Vite*, build `npm run build`, output `dist`. Add the
+two `VITE_` variables. **Netlify:** the same, with `dist` as the publish directory. Both need an SPA
+rewrite (`/* → /index.html`) so deep links work.
+
+---
+
+## Flashing the ESP32
+
+1. Arduino IDE → Boards Manager → **esp32 by Espressif**. Board: *ESP32 Dev Module*. No extra
+   libraries: `WiFi`, `HTTPClient` and `Preferences` ship with the core.
+2. `cp firmware/waterguard_esp32/secrets.h.example firmware/waterguard_esp32/secrets.h` and fill in
+   the WiFi credentials, the functions base URL and the device key from the seed script or from
+   Settings → register a device.
+3. **Check the pin map in `hardware.h` against your board before energising anything.** Every pin is
+   marked `TODO: confirm`. The probes are on ADC1 (GPIO 34/35/32) because ADC2 cannot be read while
+   WiFi is active.
+4. Flash, then open the serial monitor at **115200**. You should see the configuration version, then
+   a status line every ten seconds.
+
+### Registering a device
+
+Settings → Devices in the dashboard calls the `register-device` function, which mints a key, stores
+only its SHA-256 hash, and returns the plaintext once. If it is lost, rotate it — it cannot be
+recovered.
+
+---
+
+## Running the simulator
+
+```bash
+npm run sim                                    # one device, printing locally
+npm run sim -- --devices 3 --speed 10          # three devices, ten times real time
+npm run sim -- --scenario acid_event --verbose
+npm run sim -- --key wg_live_xxx --api https://YOUR.supabase.co/functions/v1
 ```
-#WG,ms,state,batch,chamberL,pH,TDS,v1,v2,v3,tankL,tankPh,pass,fail,alarm
-#WG,12500,TEST,19,100.0,9.12,388,0,0,0,0.0,7.20,14,4,
-```
 
-## Known limits
+| Scenario | What it demonstrates |
+|---|---|
+| `normal` | Ordinary running with occasional bad batches |
+| `acid_event` | An AMD slug arrives: batches divert, the tank doses, V3 releases |
+| `high_tds` | Water the tank cannot fix — diverted, and the TDS warning fires |
+| `tank_full` | The tank backs up until batches are HELD in the chamber |
+| `neutraliser_empty` | V3 locks, the siren sounds, the critical alarm escalates |
+| `sensor_stuck` | A fouled probe reading a plausible constant — caught after 5 minutes |
+| `offline` | Ninety seconds in the dark, then the backlog replays |
 
-- The treatment tank corrects pH only. A batch that fails on TDS is diverted and held — the
-  plant traps it, but cannot fix it.
-- Flow is counted in code, not measured by a sensor, so the 100 L batch is nominal.
-- The tank pH in the demo build is modelled rather than probed (`DEMO_TANK_MODEL`); the real
-  build reads a second probe.
+One API key identifies one device, so `--devices N` with `--key` is refused; run a process per key,
+or drop `--key` to run a fleet locally.
+
+---
+
+## Role-by-role guide
+
+### Operator — you run the plant
+
+- **Fleet** is your first page: one card per controller, its state, neutraliser level, how much water
+  went to the river today and how much was kept out of it.
+- **Live view** shows the process diagram with live valve positions, the pH band with the current
+  reading on it, the three-second test countdown and the treatment "stable x/3 s" bar. If V3 is
+  locked, the reason is on screen in the firmware's own words.
+- **Controls** is where you act. Every button opens a confirmation that states the effect in plain
+  language, and every request shows its outcome: pending, accepted, or rejected with the reason.
+  Manual valve and pump control needs MANUAL mode, and the interlocks still apply there.
+- **Alarms**: acknowledge with a note. Acknowledging says you have taken ownership; it does not clear
+  the alarm — that happens on its own when the cause goes away. An unacknowledged critical alarm
+  escalates to site admins after ten minutes.
+- **Shift log**: write the handover. An automatic summary of the shift's batches and alarms is
+  attached to it.
+- **Inventory**: record deliveries and drum refills. The page estimates days of stock left from the
+  actual consumption rate.
+
+### Site manager — you are accountable for the plant
+
+- **Analytics**: pass rate by day, volumes released against volumes blocked, pH and TDS
+  distributions, why batches failed, neutraliser consumption per litre treated and what it costs,
+  average treatment time and uptime.
+- **Batches**: every batch ever tested, searchable, with a drill-down showing the telemetry recorded
+  during that batch and the treatment cycle that dealt with it. CSV export.
+- **Maintenance**: calibration schedule with overdue badges, pump run-hours and valve cycle counts
+  derived from telemetry rather than from a counter the device could lose.
+- **Audit**: who changed what, written by database triggers.
+
+### Environmental / compliance officer — you sign the report
+
+- **Compliance reports**: choose a site and a date range and generate a PDF or CSV covering total
+  volumes discharged, quality of everything released (min/avg/max pH and TDS), failures caught,
+  treated releases, alarms and how they were handled, limit changes in the period, and calibration
+  status.
+- The report leads with a **computed** statement: *"All N batches discharged in this period were
+  tested before release and met the discharge limits in force. No untested water was released."* It
+  is derived from the records, and if any batch reached the river without satisfying the limits, the
+  statement flips and lists the exceptions.
+- Treated releases above the TDS limit are **disclosed in their own section**, because the tank
+  corrects pH and not dissolved solids. It is reported rather than hidden.
+
+### Administrator
+
+- **Settings**: register devices and mint API keys, manage people and roles, and change discharge
+  limits. The threshold form validates against the same rules the firmware enforces, states in plain
+  language what a looser limit means for the river, requires a reason of at least ten characters,
+  creates a new version rather than editing the old one, and shows whether the device has confirmed
+  it.
+
+---
+
+## Alarm rules
+
+| Severity | Condition |
+|---|---|
+| **Critical** | Neutraliser empty · device offline > 60 s · emergency stop active · interlock violation reported · tank full with a batch held > 10 min · sensor fault (flat for 5 min while pumping, or outside the physical range) |
+| **Warning** | Neutraliser below the reorder level · pH > 8.5 in the chamber or the tank · tank TDS > 1200 at release · pass rate below 50% over the last 20 batches · calibration overdue · weak WiFi |
+| **Info** | Batch failed or diverted · treatment cycle completed |
+
+The engine is a reconciler, not an event emitter: it reports which conditions are true *now*, and the
+server raises what is newly true and clears what is no longer true. Duplicate suppression comes for
+free, backed by a partial unique index. Notifications go through a provider interface — **email is
+implemented** (Resend); **SMS and WhatsApp are stubbed** with a clear TODO and are wired all the way
+to the call site.
+
+---
+
+## Known limitations and roadmap
+
+| Status | Limitation |
+|---|---|
+| **Closed** | *No upper pH limit in the pass rule.* The pass rule is now a band and the ceiling is enforced in firmware: alkaline batches divert, dosing aims at the middle of the band with an acid trim for overshoot, and V3 re-checks the ceiling every tick during release. |
+| Open | *The tank corrects pH, not TDS.* A batch that failed on dissolved solids is neutralised but still salty. The dashboard warns on every such release and the compliance report lists them. Fixing it needs reverse osmosis or evaporation. |
+| Open | *Flow is counted in code.* Every volume is marked with an asterisk and labelled estimated until a device reports `flow_sensor: true`. Fit a pulse flow meter and the labels change on their own. |
+| Open | *One probe per measurement.* A fouled probe is a single point of failure. The stuck-reading and out-of-range rules catch the obvious cases; redundant probes with a voting rule would be the real fix. |
+| Open | *No tank TDS probe on the bench build.* The tank inherits the TDS of what went into it. |
+
+---
+
+## Data retention
+
+Telemetry arrives every 5 s: about 17,000 rows per device per day. Policy is **30 days raw, then
+hourly aggregates forever** (`downsample_telemetry()`). Batches, treatment cycles, alarms, events and
+the audit log are compliance records and are never downsampled or deleted.
+
+---
+
+## The prototype
+
+| Real plant | Bench build |
+|---|---|
+| ESP32 controller with WiFi | Same, or an Arduino Uno for the Tinkercad demo |
+| pH and TDS probes | Potentiometers |
+| Solenoid valves V1, V2, V3 | Micro servos, 0° shut and 90° open |
+| Sump, dosing and acid trim pumps | DC motors |
+| Flow meter | Litres counted in code — volumes marked *estimated* |
+| Treatment tank, neutraliser reservoir | 300 L tank, 20 L drum |

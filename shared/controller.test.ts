@@ -191,6 +191,29 @@ describe('interlocks — the safety core', () => {
     expect(rig.c.state).toBe('TREAT');
   });
 
+  // Regression: with an empty drum and a tank already inside the band, the
+  // plant used to bounce RELEASE -> TREAT -> CONFIRM -> RELEASE forever. V3
+  // stayed safely shut, but nobody was ever told to go and refill the drum.
+  it('locks out instead of oscillating when dosing cannot clear the block', () => {
+    const rig = new Rig().set({ ph: 4.0 }).until((c) => c.state === 'TREAT');
+    rig.until((c) => c.state === 'CONFIRM', 60);
+    rig.set({ neutraliserPct: 0 });          // the drum runs dry at the worst moment
+    rig.until((c) => c.state === 'LOCKOUT', 60);
+
+    expect(rig.c.out.v3).toBe(false);
+    expect(rig.c.out.siren).toBe(true);
+    expect(rig.c.lockoutReason).toMatch(/Neutraliser reservoir is empty/);
+
+    // and it stays there rather than flapping
+    rig.run(10);
+    expect(rig.c.state).toBe('LOCKOUT');
+
+    // until somebody refills it, at which point the safe water is released
+    rig.set({ neutraliserPct: 80 });
+    rig.until((c) => c.state === 'RELEASE', 60);
+    expect(rig.c.out.v3).toBe(true);
+  });
+
   it('refuses V1 when the chamber water fails the test', () => {
     const rig = new Rig().set({ ph: 4.0 });
     rig.c.mode = 'MANUAL';
