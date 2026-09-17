@@ -72,20 +72,20 @@ export async function sendEmail(to: string, n: Notification): Promise<SendResult
 }
 
 function emailHtml(n: Notification): string {
-  const colour = n.severity === 'critical' ? '#d03b3b' : n.severity === 'warning' ? '#b8860b' : '#0d5f57';
+  const colour = n.severity === 'critical' ? '#DC2626' : n.severity === 'warning' ? '#B45309' : '#087EA4';
   const link = n.url
     ? `<p style="margin:24px 0 0"><a href="${n.url}" style="background:${colour};color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600">Open the dashboard</a></p>`
     : '';
   return `
-  <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:560px;color:#0d1413">
+  <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:560px;color:#172B3A">
     <p style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${colour};font-weight:700;margin:0 0 4px">
       ${n.severity} alarm
     </p>
     <h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(n.title)}</h1>
-    <p style="margin:0 0 6px;color:#4d5956">${escapeHtml(n.site)} · ${escapeHtml(n.device)}</p>
+    <p style="margin:0 0 6px;color:#4A6076">${escapeHtml(n.site)} · ${escapeHtml(n.device)}</p>
     <p style="font-size:15px;line-height:1.5">${escapeHtml(n.body)}</p>
     ${link}
-    <p style="font-size:12px;color:#7c8885;margin-top:28px;border-top:1px solid #dde3e1;padding-top:12px">
+    <p style="font-size:12px;color:#7C93A6;margin-top:28px;border-top:1px solid #DBE7EE;padding-top:12px">
       WaterGuard — acid mine drainage test-before-release control.
       The plant keeps running and keeps enforcing its interlocks whether or not this email arrives.
     </p>

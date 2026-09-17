@@ -63,7 +63,7 @@ export default function BatchDetail() {
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="font-display text-lg font-semibold text-ink">
+            <h1 className="text-[22px] font-semibold leading-tight text-ink">
               Batch {String(batch.batch_no).padStart(4, '0')}
             </h1>
             <p className="text-sm text-muted">

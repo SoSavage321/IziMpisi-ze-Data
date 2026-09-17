@@ -104,7 +104,7 @@ export default function Control() {
           <Link to={`/device/${deviceId}`} className="mb-1 inline-flex items-center gap-1 text-xs text-muted hover:text-ink">
             <ChevronLeft className="h-3.5 w-3.5" /> Back to the live view
           </Link>
-          <h1 className="font-display text-lg font-semibold text-ink">Controls · {device.device_name}</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Controls · {device.device_name}</h1>
           <p className="text-sm text-muted">{device.site_name}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -121,7 +121,7 @@ export default function Control() {
 
       {device.offline ? (
         <div className="rounded-xl border border-crit/50 bg-crit/5 p-4 text-sm">
-          <p className="font-medium text-crit">This device is offline — last seen {ago(device.last_seen)}</p>
+          <p className="font-medium text-crit-ink">This device is offline — last seen {ago(device.last_seen)}</p>
           <p className="mt-1 text-ink-2">
             Commands will queue, but they expire after 30 seconds, so anything sent now will almost certainly
             expire before the device reconnects. The plant keeps running its own logic while it is offline.
@@ -236,7 +236,7 @@ export default function Control() {
                     Close
                   </Button>
                 </div>
-                {locked && valve === 'V3' ? <p className="mt-2 text-xs text-crit">{locked}</p> : null}
+                {locked && valve === 'V3' ? <p className="mt-2 text-xs text-crit-ink">{locked}</p> : null}
               </div>
             );
           })}

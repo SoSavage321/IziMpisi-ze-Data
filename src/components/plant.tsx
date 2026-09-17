@@ -33,7 +33,7 @@ export interface PlantView {
 function waterClass(ph: number | null, tds: number | null, limits: { phMin: number; phMax: number; tdsMax: number }) {
   if (ph === null) return 'fill-muted/30';
   if (ph < limits.phMin) return 'fill-crit/40';
-  if (ph > limits.phMax) return 'fill-serious/45';
+  if (ph > limits.phMax) return 'fill-warn/45';
   if (tds !== null && tds > limits.tdsMax) return 'fill-warn/45';
   return 'fill-info/35';
 }
@@ -71,14 +71,14 @@ export function ProcessDiagram({ v, limits }: {
 
       {/* sump */}
       <rect x="8" y="96" width="86" height="52" rx="8" className="fill-raised stroke-line [stroke-width:1.5]" />
-      <text x="51" y="118" textAnchor="middle" className="fill-ink font-display text-[11px] font-semibold uppercase tracking-[0.1em]">Sump</text>
+      <text x="51" y="118" textAnchor="middle" className="fill-ink text-[11.5px] font-semibold">Sump</text>
       <text x="51" y="136" textAnchor="middle" className="fill-muted font-mono text-[10.5px]">{v.sumpPump ? 'pumping' : 'pump off'}</text>
 
       {/* check chamber */}
       <rect x="130" y="56" width="110" height="132" rx="8" className="fill-raised stroke-line [stroke-width:1.5]" />
       <rect x="132" y={186 - chamberH} width="106" height={Math.max(0, chamberH)} rx="6" className={chamberWater} />
       {chamberH > 2 ? <line x1="132" y1={186 - chamberH} x2="238" y2={186 - chamberH} className="stroke-info [stroke-width:1.5]" /> : null}
-      <text x="185" y="44" textAnchor="middle" className="fill-ink font-display text-[11px] font-semibold uppercase tracking-[0.1em]">Check chamber</text>
+      <text x="185" y="44" textAnchor="middle" className="fill-ink text-[11.5px] font-semibold">Check chamber</text>
       <text x="185" y="208" textAnchor="middle" className="fill-muted font-mono text-[10.5px]">
         {num(v.chamberL)} / {num(v.batchL)} L
       </text>
@@ -99,7 +99,7 @@ export function ProcessDiagram({ v, limits }: {
       <rect x="430" y="148" width="150" height="76" rx="8" className="fill-raised stroke-line [stroke-width:1.5]" />
       <rect x="432" y={222 - tankH} width="146" height={Math.max(0, tankH)} rx="6" className={tankWater} />
       {tankH > 2 ? <line x1="432" y1={222 - tankH} x2="578" y2={222 - tankH} className="stroke-info [stroke-width:1.5]" /> : null}
-      <text x="505" y="138" textAnchor="middle" className="fill-ink font-display text-[11px] font-semibold uppercase tracking-[0.1em]">Treatment tank</text>
+      <text x="505" y="138" textAnchor="middle" className="fill-ink text-[11.5px] font-semibold">Treatment tank</text>
       <text x="505" y="176" textAnchor="middle" className="fill-muted font-mono text-[10.5px]">{num(v.tankL)} / {num(v.tankCapL)} L</text>
       <text x="505" y="192" textAnchor="middle" className="fill-muted font-mono text-[10.5px]">
         {v.tankL > 0 ? `pH ${fmtPh(v.tankPh)}` : 'empty'}{v.dosingPump ? ' · dosing' : ''}
@@ -113,7 +113,7 @@ export function ProcessDiagram({ v, limits }: {
 
       {/* river */}
       <rect x="658" y="56" width="154" height="64" rx="8" className="fill-raised stroke-line [stroke-width:1.5]" />
-      <text x="735" y="82" textAnchor="middle" className="fill-ink font-display text-[11px] font-semibold uppercase tracking-[0.1em]">River</text>
+      <text x="735" y="82" textAnchor="middle" className="fill-ink text-[11.5px] font-semibold">River</text>
       <text x="735" y="100" textAnchor="middle" className="fill-muted font-mono text-[10.5px]">
         {v.v1 ? 'tested water' : v.v3 ? 'treated water' : 'no discharge'}
       </text>
@@ -130,7 +130,7 @@ export function PhBand({ value, phMin, phMax, height = 92 }: {
 }) {
   const x = (v: number) => 8 + (v / 14) * 584;
   const inBand = value !== null && value >= phMin && value <= phMax;
-  const tone = value === null ? 'text-muted' : inBand ? 'text-good' : value < phMin ? 'text-crit' : 'text-serious';
+  const tone = value === null ? 'text-muted' : inBand ? 'text-good-ink' : value < phMin ? 'text-crit' : 'text-warn-ink';
 
   return (
     <div>
@@ -138,9 +138,9 @@ export function PhBand({ value, phMin, phMax, height = 92 }: {
         aria-label={`pH ${value === null ? 'unknown' : value.toFixed(2)}; acceptance band ${phMin} to ${phMax}`}>
         <defs>
           <linearGradient id="phscale" x1="0" x2="1">
-            <stop offset="0%" stopColor="#b8332f" /><stop offset="24%" stopColor="#c2694a" />
-            <stop offset="48%" stopColor="#6b7a76" /><stop offset="52%" stopColor="#6b7a76" />
-            <stop offset="76%" stopColor="#2f6ea8" /><stop offset="100%" stopColor="#1d4f9e" />
+            <stop offset="0%" stopColor="#EF4444" /><stop offset="24%" stopColor="#F59E0B" />
+            <stop offset="48%" stopColor="#94A3B8" /><stop offset="52%" stopColor="#94A3B8" />
+            <stop offset="76%" stopColor="#087EA4" /><stop offset="100%" stopColor="#0B1F33" />
           </linearGradient>
         </defs>
 

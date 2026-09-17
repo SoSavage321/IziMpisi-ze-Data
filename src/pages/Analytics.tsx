@@ -53,7 +53,7 @@ export default function Analytics() {
     for (const b of batches ?? []) if (b.fail_reason && b.fail_reason in out) out[b.fail_reason as keyof typeof out] += 1;
     return [
       { name: 'Acid (pH low)', value: out.ACID, fill: 'rgb(var(--crit))' },
-      { name: 'Alkaline (pH high)', value: out.ALKALINE, fill: 'rgb(var(--serious))' },
+      { name: 'Alkaline (pH high)', value: out.ALKALINE, fill: 'rgb(var(--warn))' },
       { name: 'TDS over limit', value: out.TDS, fill: 'rgb(var(--warn))' },
     ];
   }, [batches]);
@@ -83,7 +83,7 @@ export default function Analytics() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Analytics</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Analytics</h1>
           <p className="text-sm text-muted">How the plant has been performing</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -158,7 +158,7 @@ export default function Analytics() {
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                   {phBuckets.map((b) => (
                     <Cell key={b.label}
-                      fill={b.from >= 6.5 && b.to <= 8.5 ? 'rgb(var(--good))' : b.to <= 6.5 ? 'rgb(var(--crit))' : 'rgb(var(--serious))'} />
+                      fill={b.from >= 6.5 && b.to <= 8.5 ? 'rgb(var(--good))' : b.to <= 6.5 ? 'rgb(var(--crit))' : 'rgb(var(--warn))'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -230,7 +230,7 @@ function Tile({ label, value, hint, tone }: { label: string; value: string; hint
   return (
     <div className="bg-surface p-4">
       <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted">{label}</p>
-      <p className={cn('mt-1 text-xl font-semibold tabular', tone === 'good' ? 'text-good' : 'text-ink')}>{value}</p>
+      <p className={cn('mt-1 text-xl font-semibold tabular', tone === 'good' ? 'text-good-ink' : 'text-ink')}>{value}</p>
       {hint ? <p className="text-xs text-ink-2">{hint}</p> : null}
     </div>
   );

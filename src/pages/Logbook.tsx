@@ -96,7 +96,7 @@ export default function Logbook() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Shift logbook</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Shift logbook</h1>
           <p className="text-sm text-muted">Handover notes and what the plant did while you were on</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -204,7 +204,7 @@ function Cell({ label, value, hint, tone }: { label: string; value: string; hint
     <div className="bg-surface p-3">
       <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted">{label}</p>
       <p className={`mt-1 text-lg font-semibold tabular ${
-        tone === 'good' ? 'text-good' : tone === 'crit' ? 'text-crit' : 'text-ink'}`}>
+        tone === 'good' ? 'text-good-ink' : tone === 'crit' ? 'text-crit' : 'text-ink'}`}>
         {value}
       </p>
       {hint ? <p className="text-xs text-ink-2">{hint}</p> : null}

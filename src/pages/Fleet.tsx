@@ -27,7 +27,7 @@ export default function Fleet() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-lg font-semibold text-ink">Fleet overview</h1>
+        <h1 className="text-[22px] font-semibold leading-tight text-ink">Fleet overview</h1>
         <p className="text-sm text-muted">
           {data.length} controller{data.length === 1 ? '' : 's'} across {sites.length} site{sites.length === 1 ? '' : 's'} · today so far
         </p>
@@ -59,7 +59,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
   return (
     <div className="bg-surface p-4">
       <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted">{label}</p>
-      <p className={cn('mt-1 text-2xl font-semibold tabular', tone === 'good' ? 'text-good' : 'text-ink')}>{value}</p>
+      <p className={cn('mt-1 text-2xl font-semibold tabular', tone === 'good' ? 'text-good-ink' : 'text-ink')}>{value}</p>
       {hint ? <p className="mt-0.5 text-xs text-ink-2">{hint}</p> : null}
     </div>
   );
@@ -83,7 +83,7 @@ function DeviceCard({ d }: { d: FleetRow }) {
 
       <div className="flex items-center gap-3 text-xs text-muted">
         {d.offline
-          ? <span className="inline-flex items-center gap-1.5 text-crit"><WifiOff className="h-3.5 w-3.5" /> last seen {ago(d.last_seen)}</span>
+          ? <span className="inline-flex items-center gap-1.5 text-crit-ink"><WifiOff className="h-3.5 w-3.5" /> last seen {ago(d.last_seen)}</span>
           : <span className="inline-flex items-center gap-1.5"><Wifi className="h-3.5 w-3.5" /> {ago(d.last_seen)}</span>}
         {d.estop ? <Badge tone="crit">E-stop</Badge> : null}
         {d.mode && d.mode !== 'AUTO' ? <Badge tone="warn">{d.mode}</Badge> : null}
@@ -158,7 +158,7 @@ function SiteMap({ rows }: { rows: FleetRow[] }) {
 
   return (
     <Card>
-      <h2 className="mb-1 font-display text-[12px] font-semibold uppercase tracking-[0.13em] text-ink">Sites</h2>
+      <h2 className="text-[15px] font-semibold text-ink">Sites</h2>
       <p className="mb-3 text-xs text-muted">Positions from each site&apos;s recorded coordinates</p>
       <svg viewBox="0 0 800 320" className="block h-auto w-full" role="img" aria-label="Map of monitored sites">
         <rect x="0" y="0" width="800" height="320" rx="10" className="fill-raised" />
@@ -181,7 +181,7 @@ function SiteMap({ rows }: { rows: FleetRow[] }) {
             <g key={p.site_id}>
               <circle cx={cx} cy={cy} r="14" className={cn(cls, 'opacity-20')} />
               <circle cx={cx} cy={cy} r="6" className={cls} />
-              <text x={cx} y={cy - 20} textAnchor="middle" className="fill-ink font-display text-[11px] font-semibold">
+              <text x={cx} y={cy - 20} textAnchor="middle" className="fill-ink text-[11.5px] font-semibold">
                 {p.site_name}
               </text>
               <text x={cx} y={cy + 26} textAnchor="middle" className="fill-muted font-mono text-[10px]">

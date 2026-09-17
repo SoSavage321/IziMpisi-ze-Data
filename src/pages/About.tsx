@@ -6,8 +6,9 @@
  * somebody downstream will assume it was covered.
  */
 
-import { Box, CheckCircle2, CircleDashed, Lock, ShieldCheck } from 'lucide-react';
-import { Badge, Card, CardHead } from '../components/ui.tsx';
+import { Link } from 'react-router-dom';
+import { Box, CheckCircle2, CircleDashed, Lock, PlayCircle, ShieldCheck } from 'lucide-react';
+import { Badge, Button, Card, CardHead } from '../components/ui.tsx';
 
 const STEPS = [
   { n: 1, title: 'Fill', body: 'The sump pump fills the check chamber to 100 L. Nothing has reached the river yet — that is the whole idea.' },
@@ -58,12 +59,28 @@ export default function About() {
   return (
     <div className="max-w-3xl space-y-4">
       <header>
-        <h1 className="font-display text-lg font-semibold text-ink">How WaterGuard works</h1>
+        <h1 className="text-[22px] font-semibold leading-tight text-ink">How WaterGuard works</h1>
         <p className="mt-1 text-sm text-ink-2">
           Acid mine drainage is caught in 100 L batches and tested before any of it reaches the river. Bad water
           is trapped in the chamber instead of being found downstream after it has already done damage.
         </p>
       </header>
+
+      <Card className="border-accent/30 bg-accent/5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-3">
+            <PlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-accent-ink" aria-hidden />
+            <div>
+              <p className="text-sm font-medium text-ink">Would you rather try it?</p>
+              <p className="text-sm text-ink-2">
+                The simulation runs a single node you can contaminate, starve of neutraliser, or cut off
+                the network from — using the same controller as the rig.
+              </p>
+            </div>
+          </div>
+          <Link to="/simulation"><Button variant="primary">Open the simulation</Button></Link>
+        </div>
+      </Card>
 
       <Card>
         <CardHead title="The seven steps" hint="One batch, start to finish" />

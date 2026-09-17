@@ -26,7 +26,10 @@ export function Card({ className, children, ...rest }: React.HTMLAttributes<HTML
   return (
     <section
       {...rest}
-      className={cn('rounded-xl border border-line bg-surface p-4 sm:p-5 min-w-0', className)}
+      className={cn(
+        'min-w-0 rounded-xl border border-line-soft bg-surface p-4 shadow-card sm:p-5',
+        className,
+      )}
     >
       {children}
     </section>
@@ -35,10 +38,23 @@ export function Card({ className, children, ...rest }: React.HTMLAttributes<HTML
 
 export function CardHead({ title, hint, right }: { title: string; hint?: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <header className="mb-4 flex items-baseline justify-between gap-3">
+    <header className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
       <div className="min-w-0">
-        <h2 className="font-display text-[12px] font-semibold uppercase tracking-[0.13em] text-ink">{title}</h2>
-        {hint ? <p className="mt-0.5 text-xs text-muted">{hint}</p> : null}
+        <h2 className="text-[15px] font-semibold leading-tight text-ink">{title}</h2>
+        {hint ? <p className="mt-1 text-[13px] leading-snug text-muted">{hint}</p> : null}
+      </div>
+      {right}
+    </header>
+  );
+}
+
+/** Page heading. One per screen, above the cards. */
+export function PageHead({ title, sub, right }: { title: string; sub?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0">
+        <h1 className="text-[22px] font-semibold leading-tight text-ink">{title}</h1>
+        {sub ? <p className="mt-1 text-sm text-ink-2">{sub}</p> : null}
       </div>
       {right}
     </header>
@@ -48,7 +64,7 @@ export function CardHead({ title, hint, right }: { title: string; hint?: React.R
 // ---------------------------------------------------------------- button ---
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'default' | 'primary' | 'danger' | 'ghost';
+  variant?: 'default' | 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
 };
@@ -59,16 +75,22 @@ export function Button({ variant = 'default', size = 'md', loading, className, c
       {...rest}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-lg border font-medium transition',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' && 'px-3 py-1.5 text-xs',
+        'inline-flex select-none items-center justify-center gap-2 rounded-lg border font-medium',
+        'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
+        'active:translate-y-px disabled:pointer-events-none disabled:opacity-45',
+        size === 'sm' && 'gap-1.5 px-3 py-1.5 text-[13px]',
         size === 'md' && 'px-4 py-2 text-sm',
-        size === 'lg' && 'px-5 py-3 text-base',
-        variant === 'default' && 'border-line bg-raised text-ink hover:border-accent',
-        variant === 'primary' && 'border-accent bg-accent text-white hover:opacity-90',
-        variant === 'danger' && 'border-crit bg-crit text-white hover:opacity-90',
-        variant === 'ghost' && 'border-transparent bg-transparent text-ink-2 hover:bg-raised',
+        size === 'lg' && 'px-5 py-2.5 text-[15px]',
+        variant === 'default' &&
+          'border-line bg-surface text-ink shadow-xs hover:bg-raised',
+        variant === 'primary' &&
+          'border-transparent bg-accent text-white shadow-xs hover:bg-accent/90',
+        variant === 'secondary' &&
+          'border-transparent bg-secondary text-white shadow-xs hover:bg-secondary/90',
+        variant === 'danger' &&
+          'border-transparent bg-crit text-white shadow-xs hover:bg-crit/90',
+        variant === 'ghost' &&
+          'border-transparent bg-transparent text-ink-2 hover:bg-raised hover:text-ink',
         className,
       )}
     >
@@ -82,12 +104,23 @@ export function Button({ variant = 'default', size = 'md', loading, className, c
 
 export type Tone = 'good' | 'warn' | 'serious' | 'crit' | 'info' | 'neutral';
 
+/** Soft tinted chips: the bright status colour as a wash, the dark step as text. */
 const TONE_STYLE: Record<Tone, string> = {
-  good: 'border-good/50 text-good',
-  warn: 'border-warn/60 text-warn',
-  serious: 'border-serious/60 text-serious',
-  crit: 'border-crit/60 text-crit',
-  info: 'border-info/50 text-info',
+  good:    'border-good/25 bg-good/10 text-good-ink',
+  warn:    'border-warn/30 bg-warn/10 text-warn-ink',
+  serious: 'border-warn/30 bg-warn/10 text-warn-ink',
+  crit:    'border-crit/25 bg-crit/10 text-crit-ink',
+  info:    'border-info/25 bg-info/10 text-info-ink',
+  neutral: 'border-line bg-raised text-ink-2',
+};
+
+/** The same tones without a fill, for surfaces that supply their own. */
+const TONE_BORDER: Record<Tone, string> = {
+  good:    'border-good/30 text-good-ink',
+  warn:    'border-warn/35 text-warn-ink',
+  serious: 'border-warn/35 text-warn-ink',
+  crit:    'border-crit/30 text-crit-ink',
+  info:    'border-info/30 text-info-ink',
   neutral: 'border-line text-ink-2',
 };
 
@@ -106,7 +139,7 @@ export function Badge({ tone = 'neutral', children, icon = true, className }: {
   const Icon = TONE_ICON[tone];
   return (
     <span className={cn(
-      'inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-1 text-xs font-medium',
+      'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium',
       TONE_STYLE[tone], className,
     )}>
       {icon ? <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
@@ -148,17 +181,17 @@ export function Field({ label, hint, htmlFor, children, error }: {
 }) {
   return (
     <label className="block" htmlFor={htmlFor}>
-      <span className="mb-1.5 block text-xs font-medium text-ink-2">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink-2">{label}</span>
       {children}
-      {error ? <span className="mt-1 block text-xs text-crit">{error}</span> : null}
+      {error ? <span className="mt-1 block text-xs text-crit-ink">{error}</span> : null}
       {hint && !error ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
     </label>
   );
 }
 
 const controlClass =
-  'w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-ink ' +
-  'placeholder:text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent';
+  'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink shadow-xs ' +
+  'transition-colors placeholder:text-muted hover:border-muted/50';
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...rest }, ref) {
@@ -189,10 +222,10 @@ export function Dialog({ open, onClose, title, description, children, footer }: 
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-xl border border-line bg-surface p-5 sm:rounded-xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-primary/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="max-h-[92vh] w-full max-w-lg animate-fadeUp overflow-y-auto rounded-t-2xl border border-line-soft bg-surface p-5 shadow-lg sm:rounded-2xl">
         <div className="mb-3 flex items-start justify-between gap-4">
-          <h2 className="font-display text-base font-semibold text-ink">{title}</h2>
+          <h2 className="text-[17px] font-semibold text-ink">{title}</h2>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-muted hover:bg-raised">
             <X className="h-5 w-5" />
           </button>
@@ -214,7 +247,7 @@ export function Table({ head, children, empty }: { head: string[]; children: Rea
         <thead>
           <tr>
             {head.map((h) => (
-              <th key={h} className="border-b border-line px-3 py-2 text-left font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-muted">
+              <th key={h} className="border-b border-line bg-raised/60 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
                 {h}
               </th>
             ))}
@@ -228,7 +261,7 @@ export function Table({ head, children, empty }: { head: string[]; children: Rea
 }
 
 export function Td({ className, children, ...rest }: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td {...rest} className={cn('border-b border-line px-3 py-2 text-ink-2', className)}>{children}</td>;
+  return <td {...rest} className={cn('border-b border-line-soft px-3 py-2.5 text-ink-2', className)}>{children}</td>;
 }
 
 // -------------------------------------------------------------- feedback ---
@@ -244,7 +277,7 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
 
 export function Empty({ title, body }: { title: string; body?: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-line p-8 text-center">
+    <div className="rounded-xl border border-dashed border-line bg-raised/40 p-10 text-center">
       <p className="font-medium text-ink">{title}</p>
       {body ? <p className="mt-1 text-sm text-muted">{body}</p> : null}
     </div>
@@ -254,8 +287,8 @@ export function Empty({ title, body }: { title: string; body?: string }) {
 export function ErrorNote({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error);
   return (
-    <div className="rounded-xl border border-crit/50 bg-crit/5 p-4 text-sm text-ink">
-      <p className="font-medium text-crit">Could not load this</p>
+    <div className="rounded-xl border border-crit/30 bg-crit/5 p-4 text-sm text-ink">
+      <p className="font-medium text-crit-ink">Could not load this</p>
       <p className="mt-1 text-ink-2">{message}</p>
     </div>
   );
@@ -295,8 +328,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           const Icon = TONE_ICON[t.tone];
           return (
             <div key={t.id} className={cn(
-              'pointer-events-auto w-full max-w-sm rounded-xl border bg-surface p-3 shadow-lg',
-              TONE_STYLE[t.tone],
+              'pointer-events-auto w-full max-w-sm animate-fadeUp rounded-xl border bg-surface p-3.5 shadow-lg',
+              TONE_BORDER[t.tone],
             )}>
               <div className="flex gap-2.5">
                 <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

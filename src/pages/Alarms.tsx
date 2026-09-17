@@ -63,7 +63,7 @@ export default function Alarms() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Alarms</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Alarms</h1>
           <p className="text-sm text-muted">
             {active.length} active · {unacked.length} not yet acknowledged
           </p>
@@ -91,9 +91,9 @@ export default function Alarms() {
 
       {unacked.some((a) => a.severity === 'critical') ? (
         <div className="flex items-start gap-3 rounded-xl border border-crit bg-crit/10 p-4">
-          <BellRing className="mt-0.5 h-5 w-5 shrink-0 animate-pulseDot text-crit" aria-hidden />
+          <BellRing className="mt-0.5 h-5 w-5 shrink-0 animate-pulseDot text-crit-ink" aria-hidden />
           <div>
-            <p className="font-medium text-crit">
+            <p className="font-medium text-crit-ink">
               {unacked.filter((a) => a.severity === 'critical').length} critical alarm(s) need acknowledgement
             </p>
             <p className="mt-0.5 text-sm text-ink-2">

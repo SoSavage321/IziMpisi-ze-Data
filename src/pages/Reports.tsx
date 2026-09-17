@@ -84,7 +84,7 @@ export default function Reports() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="font-display text-lg font-semibold text-ink">Compliance report</h1>
+        <h1 className="text-[22px] font-semibold leading-tight text-ink">Compliance report</h1>
         <p className="text-sm text-muted">
           Built from the controller&apos;s own batch records — every figure traces back to a row in the register
         </p>
@@ -135,9 +135,9 @@ export default function Reports() {
         <div className="flex items-start gap-3">
           {c.compliant
             ? <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-good" aria-hidden />
-            : <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-crit" aria-hidden />}
+            : <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-crit-ink" aria-hidden />}
           <div>
-            <p className={`font-display text-sm font-semibold uppercase tracking-[0.1em] ${c.compliant ? 'text-good' : 'text-crit'}`}>
+            <p className={`text-[13px] font-semibold uppercase tracking-[0.06em] ${c.compliant ? 'text-good-ink' : 'text-crit-ink'}`}>
               {c.compliant ? 'Compliant' : 'Exceptions found'}
             </p>
             <p className="mt-1 text-sm text-ink">{c.statement}</p>
@@ -247,7 +247,7 @@ function Row({ k, v, strong, tone }: { k: string; v: string; strong?: boolean; t
     <div className="flex justify-between gap-4 border-b border-line pb-2">
       <dt className="text-ink-2">{k}</dt>
       <dd className={`font-mono tabular ${strong ? 'font-medium' : ''} ${
-        tone === 'good' ? 'text-good' : tone === 'crit' ? 'text-crit' : 'text-ink'}`}>
+        tone === 'good' ? 'text-good-ink' : tone === 'crit' ? 'text-crit' : 'text-ink'}`}>
         {v}
       </dd>
     </div>

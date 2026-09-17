@@ -11,10 +11,12 @@ import autoTable from 'jspdf-autotable';
 import type { ComplianceReport } from '@shared/reports.ts';
 import { downloadBlob } from './csv.ts';
 
-const INK = '#0d1413';
-const MUTED = '#6b7a76';
-const GOOD = '#0a7d0a';
-const CRIT = '#c0392b';
+const INK = '#172B3A';      /* dark slate */
+const MUTED = '#7C93A6';
+const NAVY = '#0B1F33';     /* table headers */
+const GOOD = '#15803D';
+const CRIT = '#DC2626';
+const WARN = '#B45309';
 
 export function compliancePdf(report: ComplianceReport, opts: { timezone: string; generatedBy: string }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -44,13 +46,13 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
   text(`Prepared by ${opts.generatedBy}`, 9, MUTED);
   y += 22;
 
-  doc.setDrawColor('#d5ddda');
+  doc.setDrawColor('#DBE7EE');
   doc.line(M, y, W - M, y);
   y += 26;
 
   // ------------------------------------------------- compliance statement ---
   const compliant = report.compliance.compliant;
-  doc.setFillColor(compliant ? '#eef7ee' : '#fdeeec');
+  doc.setFillColor(compliant ? '#ECFDF3' : '#FEF2F2');
   doc.setDrawColor(compliant ? GOOD : CRIT);
   const stmtLines = doc.splitTextToSize(report.compliance.statement, W - 2 * M - 24);
   const boxH = 30 + stmtLines.length * 13;
@@ -77,7 +79,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
       ['Still held in the chamber', fmt(v.held_l)],
     ],
     theme: 'grid',
-    headStyles: { fillColor: '#0d5f57', fontSize: 9 },
+    headStyles: { fillColor: NAVY, fontSize: 9 },
     bodyStyles: { fontSize: 9, textColor: INK },
     margin: { left: M, right: M },
   });
@@ -95,7 +97,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
       ['TDS of treated releases through V3 (mg/L)', s(q.treated_release_tds.min), s(q.treated_release_tds.avg), s(q.treated_release_tds.max), String(q.treated_release_tds.n)],
     ],
     theme: 'grid',
-    headStyles: { fillColor: '#0d5f57', fontSize: 9 },
+    headStyles: { fillColor: NAVY, fontSize: 9 },
     bodyStyles: { fontSize: 9, textColor: INK },
     margin: { left: M, right: M },
   });
@@ -111,7 +113,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
       ['Treatment cycles released', String(report.treated_releases)],
     ],
     theme: 'grid',
-    headStyles: { fillColor: '#0d5f57', fontSize: 9 },
+    headStyles: { fillColor: NAVY, fontSize: 9 },
     bodyStyles: { fontSize: 9, textColor: INK },
     margin: { left: M, right: M },
   });
@@ -137,7 +139,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
       head: [['Treated release above the TDS limit — cycle', 'TDS at release (mg/L)']],
       body: report.compliance.tds_exceedances.map((e) => [String(e.cycle_no), String(e.end_tds)]),
       theme: 'grid',
-      headStyles: { fillColor: '#b8860b', fontSize: 9 },
+      headStyles: { fillColor: WARN, fontSize: 9 },
       bodyStyles: { fontSize: 9, textColor: INK },
       margin: { left: M, right: M },
       didDrawPage: () => undefined,
@@ -170,7 +172,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
       ['Median time to acknowledge (minutes)', inc.median_ack_minutes === null ? 'n/a' : String(inc.median_ack_minutes)],
     ],
     theme: 'grid',
-    headStyles: { fillColor: '#0d5f57', fontSize: 9 },
+    headStyles: { fillColor: NAVY, fontSize: 9 },
     bodyStyles: { fontSize: 9, textColor: INK },
     margin: { left: M, right: M },
   });
@@ -187,7 +189,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
         a.acknowledged_at ? `Acknowledged ${fmtDateTime(a.acknowledged_at)}${a.ack_note ? `: ${a.ack_note}` : ''}` : 'Not acknowledged',
       ]),
       theme: 'striped',
-      headStyles: { fillColor: '#0d5f57', fontSize: 8 },
+      headStyles: { fillColor: NAVY, fontSize: 8 },
       bodyStyles: { fontSize: 8, textColor: INK },
       columnStyles: { 2: { cellWidth: 150 }, 3: { cellWidth: 150 } },
       margin: { left: M, right: M },
@@ -208,7 +210,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
         ])
       : [['No changes to the discharge limits in this period', '', '', '']],
     theme: 'grid',
-    headStyles: { fillColor: '#0d5f57', fontSize: 8 },
+    headStyles: { fillColor: NAVY, fontSize: 8 },
     bodyStyles: { fontSize: 8, textColor: INK },
     margin: { left: M, right: M },
   });
@@ -225,7 +227,7 @@ export function compliancePdf(report: ComplianceReport, opts: { timezone: string
       c.overdue ? 'OVERDUE' : 'in date',
     ]),
     theme: 'grid',
-    headStyles: { fillColor: '#0d5f57', fontSize: 8 },
+    headStyles: { fillColor: NAVY, fontSize: 8 },
     bodyStyles: { fontSize: 8, textColor: INK },
     margin: { left: M, right: M },
   });

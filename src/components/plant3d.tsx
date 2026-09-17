@@ -37,11 +37,11 @@ export interface Limits { phMin: number; phMax: number; tdsMax: number }
  * the only cue — the labels carry the numbers too.
  */
 function waterColour(ph: number | null, tds: number | null, l: Limits): number {
-  if (ph === null) return 0x7a8a86;          // no reading: neutral grey
-  if (ph < l.phMin) return 0xd03b3b;         // acidic
-  if (ph > l.phMax) return 0xec835a;         // alkaline
-  if (tds !== null && tds > l.tdsMax) return 0xfab219;  // over the TDS limit
-  return 0x2a78d6;                           // inside the band
+  if (ph === null) return 0x94a3b8;          // no reading: neutral slate
+  if (ph < l.phMin) return 0xef4444;         // acidic
+  if (ph > l.phMax) return 0xf59e0b;         // alkaline
+  if (tds !== null && tds > l.tdsMax) return 0xf59e0b;  // over the TDS limit
+  return 0x087ea4;                           // inside the band — water blue
 }
 
 interface Built {
@@ -168,9 +168,9 @@ export function Plant3D({ v, limits, deviceName }: {
       const b = builtRef.current;
       if (!b) return;
       const dark = isDark();
-      b.scene.background = new THREE.Color(dark ? 0x0b100f : 0xe9efec);
-      (b.scene.fog as THREE.Fog).color.set(dark ? 0x0b100f : 0xe9efec);
-      (b.ground.material as THREE.MeshStandardMaterial).color.set(dark ? 0x16201e : 0xd8e2de);
+      b.scene.background = new THREE.Color(dark ? 0x071523 : 0xf4f9fb);
+      (b.scene.fog as THREE.Fog).color.set(dark ? 0x071523 : 0xf4f9fb);
+      (b.ground.material as THREE.MeshStandardMaterial).color.set(dark ? 0x0f2438 : 0xdde9ef);
     };
     apply();
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -312,8 +312,8 @@ function buildScene(mount: HTMLElement): Built {
   mount.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(dark ? 0x0b100f : 0xe9efec);
-  scene.fog = new THREE.Fog(dark ? 0x0b100f : 0xe9efec, 22, 44);
+  scene.background = new THREE.Color(dark ? 0x071523 : 0xf4f9fb);
+  scene.fog = new THREE.Fog(dark ? 0x071523 : 0xf4f9fb, 22, 44);
 
   const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 100);
   camera.position.set(9, 6.5, 10);
@@ -328,24 +328,24 @@ function buildScene(mount: HTMLElement): Built {
   controls.update();
 
   // ------------------------------------------------------------- lighting ---
-  scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x101a18 : 0x9fb0aa, dark ? 1.1 : 1.5));
+  scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x0b1f33 : 0xa8bcc7, dark ? 1.1 : 1.6));
   const key = new THREE.DirectionalLight(0xffffff, dark ? 1.4 : 1.9);
   key.position.set(7, 12, 6);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x9fd8cc, 0.5);
+  const rim = new THREE.DirectionalLight(0x5eead4, 0.5);
   rim.position.set(-8, 5, -7);
   scene.add(rim);
 
   // ---------------------------------------------------------------- ground ---
   const groundGeo = keep(new THREE.CylinderGeometry(15, 15, 0.3, 64));
   const groundMat = keep(new THREE.MeshStandardMaterial({
-    color: dark ? 0x16201e : 0xd8e2de, roughness: 0.95, metalness: 0,
+    color: dark ? 0x0f2438 : 0xdde9ef, roughness: 0.95, metalness: 0,
   }));
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.position.y = -0.15;
   scene.add(ground);
 
-  const grid = new THREE.GridHelper(30, 30, dark ? 0x24312e : 0xc2cfca, dark ? 0x1b2523 : 0xcdd9d4);
+  const grid = new THREE.GridHelper(30, 30, dark ? 0x1d3a52 : 0xc7d8e1, dark ? 0x142a3e : 0xd5e3ea);
   grid.position.y = 0.002;
   (grid.material as THREE.Material).transparent = true;
   (grid.material as THREE.Material).opacity = 0.5;
@@ -354,15 +354,15 @@ function buildScene(mount: HTMLElement): Built {
 
   // --------------------------------------------------------------- helpers ---
   const steel = keep(new THREE.MeshStandardMaterial({
-    color: dark ? 0x4a5a56 : 0x8a9a95, roughness: 0.45, metalness: 0.65,
+    color: dark ? 0x46607a : 0x8ba3b4, roughness: 0.4, metalness: 0.7,
   }));
   const shellMat = keep(new THREE.MeshPhysicalMaterial({
-    color: dark ? 0x8fa8a2 : 0xbcccc7,
+    color: dark ? 0x9db9cc : 0xc3d5df,
     roughness: 0.15, metalness: 0.1,
     transparent: true, opacity: 0.22,
     side: THREE.DoubleSide,
   }));
-  const edgeMat = keep(new THREE.LineBasicMaterial({ color: dark ? 0x6f8681 : 0x768984 }));
+  const edgeMat = keep(new THREE.LineBasicMaterial({ color: dark ? 0x6f8aa3 : 0x8399a8 }));
 
   const addEdges = (geo: THREE.BufferGeometry, mesh: THREE.Object3D) => {
     const edges = keep(new THREE.EdgesGeometry(geo, 25));
@@ -398,7 +398,7 @@ function buildScene(mount: HTMLElement): Built {
     // scaling rather than by rebuilding geometry every frame.
     const waterGeo = keep(new THREE.CylinderGeometry(radius * 0.965, radius * 0.965, 1, 36));
     const waterMat = keep(new THREE.MeshStandardMaterial({
-      color: 0x2a78d6, transparent: true, opacity: 0.82,
+      color: 0x087ea4, transparent: true, opacity: 0.82,
       roughness: 0.18, metalness: 0.05,
     }));
     const water = new THREE.Mesh(waterGeo, waterMat);
@@ -426,7 +426,7 @@ function buildScene(mount: HTMLElement): Built {
   // River: a shallow slab with a gently moving surface
   const riverGeo = keep(new THREE.BoxGeometry(4.0, 0.18, 12));
   const riverMat = keep(new THREE.MeshStandardMaterial({
-    color: 0x2f6ea8, transparent: true, opacity: 0.75, roughness: 0.25, metalness: 0.1,
+    color: 0x087ea4, transparent: true, opacity: 0.78, roughness: 0.22, metalness: 0.1,
   }));
   const river = new THREE.Mesh(riverGeo, riverMat);
   river.position.set(7.6, 0.09, 0);
@@ -434,7 +434,7 @@ function buildScene(mount: HTMLElement): Built {
 
   const bankGeo = keep(new THREE.BoxGeometry(4.6, 0.3, 12.6));
   const bank = new THREE.Mesh(bankGeo, keep(new THREE.MeshStandardMaterial({
-    color: dark ? 0x1d2825 : 0xc7d3ce, roughness: 1,
+    color: dark ? 0x132c42 : 0xcbdae2, roughness: 1,
   })));
   bank.position.set(7.6, -0.02, 0);
   scene.add(bank);
@@ -443,7 +443,7 @@ function buildScene(mount: HTMLElement): Built {
   const valveBody = keep(new THREE.CylinderGeometry(0.28, 0.28, 0.42, 20));
   const makeValve = (at: THREE.Vector3) => {
     const mat = keep(new THREE.MeshStandardMaterial({
-      color: 0x6b7a76, roughness: 0.4, metalness: 0.5,
+      color: 0x7c93a6, roughness: 0.4, metalness: 0.5,
       emissive: new THREE.Color(0x000000), emissiveIntensity: 1,
     }));
     const mesh = new THREE.Mesh(valveBody, mat);
@@ -464,7 +464,7 @@ function buildScene(mount: HTMLElement): Built {
 
   // ----------------------------------------------------------------- pipes ---
   const pipeMat = keep(new THREE.MeshStandardMaterial({
-    color: dark ? 0x3c4a47 : 0x93a39e, roughness: 0.5, metalness: 0.6,
+    color: dark ? 0x3a5670 : 0x9aaebc, roughness: 0.5, metalness: 0.6,
   }));
 
   const pipe = (points: THREE.Vector3[], radius = 0.13) => {
@@ -508,7 +508,7 @@ function buildScene(mount: HTMLElement): Built {
   const dotGeo = keep(new THREE.SphereGeometry(0.085, 10, 8));
   const makeFlow = (keyName: string, curve: THREE.CatmullRomCurve3, count = 7, size = 1) => {
     const mat = keep(new THREE.MeshStandardMaterial({
-      color: 0x8fe8d8, emissive: new THREE.Color(0x2fb39a), emissiveIntensity: 0.8,
+      color: 0x99f6e4, emissive: new THREE.Color(0x14b8a6), emissiveIntensity: 0.9,
       transparent: true, opacity: 0.95,
     }));
     const dots: THREE.Mesh[] = [];
@@ -568,7 +568,7 @@ function applyState(
   (b.tankWater.material as THREE.MeshStandardMaterial).color.setHex(
     waterColour(v.tankPh, null, limits));
   (b.drumWater.material as THREE.MeshStandardMaterial).color.setHex(
-    (v.neutraliserPct ?? 0) <= 0 ? 0xd03b3b : 0xc9d6d2);
+    (v.neutraliserPct ?? 0) <= 0 ? 0xef4444 : 0x14b8a6);
 
   // ---- valves ------------------------------------------------------------
   setValve(b.valves.V1, v.v1, false, t, reduceMotion);
@@ -598,7 +598,7 @@ function applyState(
   // ---- river surface -----------------------------------------------------
   const receiving = (v.v1 || v.v3) && !v.offline;
   const riverMat = b.river.material as THREE.MeshStandardMaterial;
-  riverMat.color.lerp(new THREE.Color(receiving ? 0x3a86c4 : 0x2f6ea8), 0.05);
+  riverMat.color.lerp(new THREE.Color(receiving ? 0x0ea5cf : 0x087ea4), 0.05);
   if (!reduceMotion) b.river.position.y = 0.09 + Math.sin(t * 1.1) * 0.012;
 }
 
@@ -618,7 +618,7 @@ function setLevel(water: THREE.Mesh, fraction: number, height: number, dt: numbe
 
 function setValve(mesh: THREE.Mesh, open: boolean, locked: boolean, t: number, reduceMotion: boolean) {
   const mat = mesh.material as THREE.MeshStandardMaterial;
-  const target = new THREE.Color(open ? 0x1f8a1f : locked ? 0x8a1f1f : 0x000000);
+  const target = new THREE.Color(open ? 0x16a34a : locked ? 0xb91c1c : 0x000000);
   mat.emissive.lerp(target, 0.12);
   mat.emissiveIntensity = locked && !reduceMotion ? 0.7 + Math.sin(t * 4) * 0.3 : 1;
   // An open valve turns its handwheel; a shut one sits still.

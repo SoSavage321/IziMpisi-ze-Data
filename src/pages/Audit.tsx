@@ -46,7 +46,7 @@ export default function Audit() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Audit log</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Audit log</h1>
           <p className="text-sm text-muted">
             Who changed what, and when. Written by database triggers, so it records the change itself rather than
             an application&apos;s account of it.

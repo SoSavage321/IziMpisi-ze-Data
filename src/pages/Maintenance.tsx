@@ -75,7 +75,7 @@ export default function Maintenance() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Maintenance</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Maintenance</h1>
           <p className="text-sm text-muted">
             {overdue.length ? `${overdue.length} overdue · ` : ''}{dueSoon.length} due within a week
           </p>

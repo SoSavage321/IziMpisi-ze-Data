@@ -17,6 +17,7 @@ import Inventory from './pages/Inventory.tsx';
 import Logbook from './pages/Logbook.tsx';
 import Settings from './pages/Settings.tsx';
 import Audit from './pages/Audit.tsx';
+import Simulation from './pages/Simulation.tsx';
 import About from './pages/About.tsx';
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/logbook" element={<Logbook />} />
         <Route path="/settings" element={adminOnly(<Settings />)} />
         <Route path="/audit" element={adminOnly(<Audit />)} />
+        <Route path="/simulation" element={<Simulation />} />
         <Route path="/about" element={<About />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

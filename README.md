@@ -123,11 +123,25 @@ npm run sim       # the device simulator, printing to the terminal
 | `supabase/functions/` | `ingest`, `commands`, `escalate`, `register-device` |
 | `scripts/seed.ts` | Demo org, sites, devices, users and seven days of history |
 | `src/components/plant3d.tsx` | The 3D digital twin of the plant (three.js), lazy-loaded |
+| `src/pages/Simulation.tsx` | The interactive node simulation (contamination, offline buffering) |
 | `dashboard/index.html` | The original standalone bench demo, kept for the Tinkercad rig |
 
 `shared/` is vendored into `supabase/functions/_shared/lib/` by `npm run sync:shared`, because the
 Supabase CLI only bundles files under `supabase/functions`. `npm run build` fails if the copies are
 stale, so the two cannot drift.
+
+---
+
+## The node simulation
+
+`/simulation` is the explainer page: one mine-water node you can push around. Trigger an acid slug, an
+alkaline slug or a salt load and watch the batch get caught; empty the neutraliser and watch V3 lock;
+**cut the Wi-Fi** and watch the controller keep filling, testing and diverting while the dashboard goes
+stale and events buffer on the device.
+
+It runs the real `Controller` from `/shared`, not a simplified copy, so the rule it demonstrates is the
+rule the firmware enforces. A demo that taught a different rule to the one the plant uses would be
+worse than no demo.
 
 ---
 

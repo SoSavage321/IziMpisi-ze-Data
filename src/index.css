@@ -2,56 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
-  Industrial theme. Every colour is a token so the two themes swap in one
-  place, and status colours are always paired with an icon and a word.
-*/
+/* ============================================================================
+   WaterGuard design tokens — Deep Blue + Teal
+
+   Primary    Deep Navy    #0B1F33   chrome, sidebar, headings
+   Secondary  Water Blue   #087EA4   links, data series, secondary actions
+   Accent     Teal         #14B8A6   primary actions, focus, active state
+   Background Light Blue   #F4F9FB
+   Cards      White        #FFFFFF
+   Text       Dark Slate   #172B3A
+
+   Status colours carry a separate "ink" variant for use as text. #22C55E on
+   white is only 2.3:1, which is illegible as a label, so text uses the darker
+   step while the dot or bar beside it keeps the bright one.
+   ========================================================================= */
+
 :root {
   color-scheme: light;
-  --bg: 229 235 232;
-  --surface: 253 254 253;
-  --raised: 241 245 243;
-  --line: 220 228 225;
-  --ink: 7 26 24;
-  --ink-2: 71 88 85;
-  --muted: 122 138 134;
-  --accent: 13 95 87;
-  --good: 12 163 12;
-  --warn: 250 178 25;
-  --serious: 236 131 90;
-  --crit: 208 59 59;
-  --info: 42 120 214;
+
+  --bg:        244 249 251;   /* #F4F9FB */
+  --surface:   255 255 255;   /* #FFFFFF */
+  --raised:    237 244 248;   /* insets, table stripes */
+  --line:      219 231 238;
+  --line-soft: 234 242 246;
+
+  --ink:       23 43 58;      /* #172B3A */
+  --ink-2:     74 96 118;
+  --muted:     124 147 166;
+
+  --primary:   11 31 51;      /* #0B1F33 */
+  --secondary:   8 126 164;   /* #087EA4 */
+  --accent:     20 184 166;   /* #14B8A6 */
+  --accent-ink: 13 148 136;   /* teal readable as text on white */
+
+  --good:      34 197 94;     /* #22C55E */
+  --good-ink:  21 128 61;
+  --warn:     245 158 11;     /* #F59E0B */
+  --warn-ink: 180  83   9;
+  --crit:     239  68  68;    /* #EF4444 */
+  --crit-ink: 220  38  38;
+  --info:       8 126 164;
+  --info-ink:   7 101 133;
+
+  /* The navy chrome is constant across themes: it is the brand surface. */
+  --nav:       11  31  51;
+  --nav-2:     18  45  71;
+  --nav-ink:  232 241 246;
+  --nav-muted:143 169 188;
+  --nav-line:  30  57  84;
+
+  /* A three-step elevation ramp, tinted with the navy rather than pure black */
+  --shadow-sm: 0 1px 2px rgb(11 31 51 / 0.06);
+  --shadow:    0 1px 3px rgb(11 31 51 / 0.08), 0 1px 2px rgb(11 31 51 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(11 31 51 / 0.10), 0 2px 6px -2px rgb(11 31 51 / 0.06);
+  --shadow-lg: 0 12px 32px -8px rgb(11 31 51 / 0.18), 0 4px 12px -4px rgb(11 31 51 / 0.08);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: 7 13 12;
-  --surface: 17 26 25;
-  --raised: 24 34 33;
-  --line: 31 43 41;
-  --ink: 238 245 243;
-  --ink-2: 173 188 184;
-  --muted: 127 143 139;
-  --accent: 63 201 173;
-  --good: 12 163 12;
-  --warn: 250 178 25;
-  --serious: 236 131 90;
-  --crit: 208 59 59;
-  --info: 57 135 229;
+
+  --bg:          7  21  35;
+  --surface:    11  31  51;
+  --raised:     17  41  63;
+  --line:       29  58  82;
+  --line-soft:  23  48  70;
+
+  --ink:       232 241 246;
+  --ink-2:     169 192 208;
+  --muted:     119 147 166;
+
+  --primary:   232 241 246;
+  --secondary:  56 175 214;
+  --accent:     45 212 191;
+  --accent-ink: 94 234 212;
+
+  --good:       34 197  94;
+  --good-ink:   74 222 128;
+  --warn:      245 158  11;
+  --warn-ink:  251 191  36;
+  --crit:      239  68  68;
+  --crit-ink:  248 113 113;
+  --info:       56 175 214;
+  --info-ink:  125 211 252;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow:    0 1px 3px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.6);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: 7 13 12;
-    --surface: 17 26 25;
-    --raised: 24 34 33;
-    --line: 31 43 41;
-    --ink: 238 245 243;
-    --ink-2: 173 188 184;
-    --muted: 127 143 139;
-    --accent: 63 201 173;
-    --info: 57 135 229;
+
+    --bg:          7  21  35;
+    --surface:    11  31  51;
+    --raised:     17  41  63;
+    --line:       29  58  82;
+    --line-soft:  23  48  70;
+
+    --ink:       232 241 246;
+    --ink-2:     169 192 208;
+    --muted:     119 147 166;
+
+    --primary:   232 241 246;
+    --secondary:  56 175 214;
+    --accent:     45 212 191;
+    --accent-ink: 94 234 212;
+
+    --good-ink:   74 222 128;
+    --warn-ink:  251 191  36;
+    --crit-ink:  248 113 113;
+    --info:       56 175 214;
+    --info-ink:  125 211 252;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow:    0 1px 3px rgb(0 0 0 / 0.5);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.55);
+    --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.6);
   }
 }
 
@@ -61,17 +129,38 @@ body {
   margin: 0;
   background: rgb(var(--bg));
   color: rgb(var(--ink));
-  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "cv05" 1;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Touch targets: operators use this on a phone, outdoors, wearing gloves. */
-button, a, [role="button"], input, select { min-height: 40px; }
+/* Operators use this on a phone, outdoors, sometimes with gloves. */
+button, a[role="button"], input, select, textarea { min-height: 40px; }
 .tabular { font-variant-numeric: tabular-nums; }
 
+h1, h2, h3 { letter-spacing: -0.011em; }
+
+/* One focus treatment everywhere, in the accent */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 6px;
+  border: 2px solid rgb(var(--bg));
+}
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--muted) / 0.6); }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }

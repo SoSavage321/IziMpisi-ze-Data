@@ -102,7 +102,7 @@ export default function SiteLive() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-lg font-semibold text-ink">{device.device_name}</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">{device.device_name}</h1>
           <p className="text-sm text-muted">
             {device.site_name} · {device.location ?? 'no location recorded'} · times in {zoneLabel(tz)}
           </p>
@@ -121,7 +121,7 @@ export default function SiteLive() {
 
       {device.estop ? (
         <div className="rounded-xl border border-crit bg-crit/10 p-4">
-          <p className="font-medium text-crit">Emergency stop is active</p>
+          <p className="font-medium text-crit-ink">Emergency stop is active</p>
           <p className="mt-1 text-sm text-ink-2">
             Every valve is shut and every pump is stopped. The plant will not resume until the E-stop is reset
             at the panel and from the control page.
@@ -287,7 +287,7 @@ function Tile({ label, value, hint, tone }: { label: string; value: string; hint
   return (
     <div className="bg-surface p-4">
       <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted">{label}</p>
-      <p className={cn('mt-1 text-xl font-semibold tabular', tone === 'good' ? 'text-good' : 'text-ink')}>{value}</p>
+      <p className={cn('mt-1 text-xl font-semibold tabular', tone === 'good' ? 'text-good-ink' : 'text-ink')}>{value}</p>
       {hint ? <p className="text-xs text-ink-2">{hint}</p> : null}
     </div>
   );

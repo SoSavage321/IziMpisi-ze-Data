@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Droplets } from 'lucide-react';
+import { Logo } from '../components/shell.tsx';
 import { useAuth } from '../hooks/auth.tsx';
 import { isDemo } from '../lib/supabase.ts';
 import { DEMO_USERS } from '../lib/demo.ts';
@@ -29,11 +29,9 @@ export default function Login() {
     <div className="flex min-h-full items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-surface">
-            <Droplets className="h-6 w-6 text-accent" aria-hidden />
-          </div>
-          <h1 className="font-display text-xl font-bold uppercase tracking-[0.14em] text-ink">
-            Water<span className="text-accent">·</span>Guard
+          <Logo className="mx-auto mb-3 h-12 w-12" />
+          <h1 className="text-[26px] font-semibold tracking-tight text-ink">
+            WaterGuard
           </h1>
           <p className="mt-1 text-sm text-muted">
             Acid mine drainage — test before release

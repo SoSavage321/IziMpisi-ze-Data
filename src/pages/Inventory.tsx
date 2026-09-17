@@ -75,7 +75,7 @@ export default function Inventory() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="font-display text-lg font-semibold text-ink">Neutraliser stock</h1>
+        <h1 className="text-[22px] font-semibold leading-tight text-ink">Neutraliser stock</h1>
         <p className="text-sm text-muted">
           What is in the store, how fast it is going, and when to order more
         </p>
@@ -150,7 +150,7 @@ export default function Inventory() {
                 <tr key={m.id} className="hover:bg-raised">
                   <Td className="font-mono text-xs">{siteDateTime(m.created_at)}</Td>
                   <Td className="text-xs">{item ? siteName(item.site_id) : '—'}</Td>
-                  <Td className={`font-mono tabular ${m.delta > 0 ? 'text-good' : 'text-ink'}`}>
+                  <Td className={`font-mono tabular ${m.delta > 0 ? 'text-good-ink' : 'text-ink'}`}>
                     {m.delta > 0 ? '+' : ''}{num(m.delta)} {item?.unit ?? 'L'}
                   </Td>
                   <Td className="capitalize text-xs">{m.kind}</Td>

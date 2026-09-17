@@ -45,7 +45,7 @@ export default function Batches() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Batch register</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Batch register</h1>
           <p className="text-sm text-muted">
             Every 100 L batch the plant has tested — {num(rows.length)} shown, {num(caught)} kept out of the river
           </p>
@@ -96,7 +96,7 @@ export default function Batches() {
           </Field>
           <div className="ml-auto flex gap-4 pb-1 text-xs">
             <span><span className="font-mono text-base tabular text-good">{num(passed)}</span> <span className="text-muted">passed</span></span>
-            <span><span className="font-mono text-base tabular text-crit">{num(caught)}</span> <span className="text-muted">diverted</span></span>
+            <span><span className="font-mono text-base tabular text-crit-ink">{num(caught)}</span> <span className="text-muted">diverted</span></span>
           </div>
         </div>
       </Card>

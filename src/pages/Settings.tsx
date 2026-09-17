@@ -135,7 +135,7 @@ export default function Settings() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-lg font-semibold text-ink">Settings</h1>
+          <h1 className="text-[22px] font-semibold leading-tight text-ink">Settings</h1>
           <p className="text-sm text-muted">Discharge limits, devices, people</p>
         </div>
         <Field label="Device">
@@ -189,7 +189,7 @@ export default function Settings() {
 
         {validation ? (
           <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-crit/50 bg-crit/5 p-3">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-crit" aria-hidden />
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-crit-ink" aria-hidden />
             <p className="text-sm text-ink">{validation}</p>
           </div>
         ) : null}
