@@ -132,8 +132,6 @@ export default function SiteLive() {
         </div>
       </header>
 
-      {latest?.extra ? <BenchReadings extra={latest.extra} /> : null}
-
       {device.estop ? (
         <div className="rounded-xl border border-crit bg-crit/10 p-4">
           <p className="font-medium text-crit-ink">Emergency stop is active</p>
@@ -208,19 +206,41 @@ export default function SiteLive() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHead title="Chamber pH" hint="The batch waiting on a decision" />
-          <PhBand value={device.ph === null ? null : Number(device.ph)} phMin={limits.phMin} phMax={limits.phMax} />
-        </Card>
+        {latest?.extra ? (
+          <CheckChamberReadings extra={latest.extra} v1={Boolean(device.v1)} v2={Boolean(device.v2)} />
+        ) : (
+          <Card>
+            <CardHead title="Chamber pH" hint="The batch waiting on a decision" />
+            <PhBand value={device.ph === null ? null : Number(device.ph)} phMin={limits.phMin} phMax={limits.phMax} />
+          </Card>
+        )}
 
         <Card className="flex flex-col gap-5">
-          <CardHead title="Dissolved solids and reagents" hint="The tank corrects pH only, never TDS" />
-          <Meter label="Chamber TDS" value={device.tds === null ? null : Number(device.tds)}
-            max={2000} limit={limits.tdsMax} unit="mg/L" />
+          <CardHead title="Treatment chamber" hint="Where a failed batch is dosed before release" />
+          {device.tds === null ? null : (
+            <Meter label="Chamber TDS" value={Number(device.tds)}
+              max={2000} limit={limits.tdsMax} unit="mg/L" />
+          )}
           <Meter label="Neutraliser reservoir" value={device.neutraliser_pct === null ? null : Number(device.neutraliser_pct)}
             max={100} unit="%" invert />
           <Meter label="Treatment tank" value={Number(latest?.tank_l ?? 0)}
             max={Number(latest?.tank_cap_l ?? 300)} unit="L" />
+
+          {(() => {
+            const phase = latest?.extra?.treatmentPhase;
+            if (typeof phase !== 'string' || phase === 'idle') return null;
+            return (
+              <div className="rounded-lg border border-line bg-raised px-3 py-2 text-sm">
+                <span className="font-medium text-ink">
+                  {phase === 'filling' ? 'Failed batch arriving · dosing pump running'
+                    : phase === 'dosing' ? 'Dosing the batch · V3 shut until it is treated'
+                    : 'Treated · V3 open, releasing to the river'}
+                </span>
+                <span className="text-muted"> — simulated. The rig fills, tests and diverts for
+                  real; it has no dosing pump and no release valve.</span>
+              </div>
+            );
+          })()}
         </Card>
       </div>
 
@@ -362,63 +382,83 @@ function describeEvent(type: string, details: Record<string, unknown>): string {
 }
 
 /**
- * What the bench rig measures that this schema has no column for. Shown as
- * the rig reports it, units and all, rather than converted into pH or mg/L
- * that the hardware cannot actually produce.
+ * The check chamber: what this node's components actually collected, and the
+ * routing that follows from it.
+ *
+ * The batch is measured here and the decision is made here, so the readings
+ * belong on this panel rather than in a box of their own. A node with a pH
+ * probe shows the pH band instead; this one has a conductivity probe, so it
+ * shows conductivity and the score its firmware derives from it.
  */
-function BenchReadings({ extra }: { extra: Record<string, number | string | boolean> }) {
-  const risk = typeof extra.risk === 'number' ? extra.risk : null;
-  const cond = typeof extra.cond === 'number' ? extra.cond : null;
-  const tempC = typeof extra.tempC === 'number' ? extra.tempC : null;
-  const chamberCm = typeof extra.chamberCm === 'number' ? extra.chamberCm : null;
+function CheckChamberReadings({ extra, v1, v2 }: {
+  extra: Record<string, number | string | boolean>;
+  v1: boolean;
+  v2: boolean;
+}) {
+  const n = (k: string) => (typeof extra[k] === 'number' ? (extra[k] as number) : null);
+  const risk = n('risk');
+  const cond = n('cond');
+  const tempC = n('tempC');
+  const chamberCm = n('chamberCm');
+  const fill = n('chamberFraction');
   const chamberFull = extra.chamberFull === true;
-  const phase = typeof extra.treatmentPhase === 'string' ? extra.treatmentPhase : null;
+  const dirty = extra.contaminated === true;
+
+  const rows: Array<{ label: string; value: string; note?: string }> = [
+    {
+      label: 'Conductivity probe',
+      value: cond === null ? '—' : String(cond),
+      note: 'raw ADC count, 0–1023',
+    },
+    {
+      label: 'Contamination score',
+      value: risk === null ? '—' : `${risk} / 100`,
+      note: 'diverts at 50',
+    },
+    {
+      label: 'Temperature',
+      value: tempC === null ? '—' : `${tempC.toFixed(1)} °C`,
+    },
+    {
+      label: 'Chamber fill',
+      value: chamberCm === null ? '—' : `${chamberCm.toFixed(1)} cm${fill === null ? '' : ` · ${Math.round(fill * 100)}%`}`,
+      note: chamberCm === null ? 'no echo from the head' : chamberFull ? 'full — batch ready to test' : 'still filling',
+    },
+  ];
 
   return (
-    <Card>
+    <Card className="flex flex-col gap-4">
       <CardHead
-        title="Bench rig readings"
-        hint="What this node actually measures. It tests for contamination only: no pH probe, no TDS meter, and the neutralising step is simulated."
+        title="Check chamber"
+        hint="Every reading this node takes, and the decision that follows"
       />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div>
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Contamination risk</p>
-          <p className="tabular text-[22px] font-semibold text-ink">
-            {risk === null ? '—' : `${risk} / 100`}
-          </p>
-          <p className={cn('text-xs', extra.contaminated === true ? 'text-crit-ink' : 'text-muted')}>
-            {extra.contaminated === true ? 'contaminated — diverting to the tank' : 'clean — straight to the river'}
-          </p>
-        </div>
-        <div>
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Conductivity probe</p>
-          <p className="tabular text-[22px] font-semibold text-ink">{cond === null ? '—' : cond}</p>
-          <p className="text-xs text-muted">raw ADC count, 0–1023</p>
-        </div>
-        <div>
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Probe temperature</p>
-          <p className="tabular text-[22px] font-semibold text-ink">{tempC === null ? '—' : `${tempC.toFixed(1)} °C`}</p>
-        </div>
-        <div>
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Chamber depth</p>
-          <p className="tabular text-[22px] font-semibold text-ink">{chamberCm === null ? '—' : `${chamberCm.toFixed(1)} cm`}</p>
-          <p className="text-xs text-muted">
-            {chamberFull ? 'chamber full — batch ready to test' : 'still filling'}
-          </p>
-        </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {rows.map((r) => (
+          <div key={r.label}>
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">{r.label}</p>
+            <p className="tabular text-[20px] font-semibold text-ink">{r.value}</p>
+            {r.note ? <p className="text-xs text-muted">{r.note}</p> : null}
+          </div>
+        ))}
       </div>
 
-      {phase && phase !== 'idle' ? (
-        <div className="mt-4 rounded-lg border border-line bg-raised px-3 py-2 text-sm">
-          <span className="font-medium text-ink">
-            {phase === 'filling' ? 'Failed batch crossing to the treatment chamber'
-              : phase === 'dosing' ? 'Neutraliser dosing the batch'
-              : 'Releasing the treated batch to the river'}
-          </span>
-          <span className="text-muted"> — simulated. The rig fills, tests and diverts for real; it
-            has no dosing pump and no release valve, so everything after the divert is acted out.</span>
-        </div>
-      ) : null}
+      <div className={cn(
+        'rounded-lg border px-3 py-2.5 text-sm',
+        dirty ? 'border-crit/40 bg-crit/5' : 'border-good/40 bg-good/5',
+      )}>
+        <p className={cn('font-medium', dirty ? 'text-crit-ink' : 'text-good-ink')}>
+          {dirty ? 'Contaminated — diverting to treatment' : 'Clean — releasing to the river'}
+        </p>
+        <p className="mt-0.5 font-mono text-xs text-muted">
+          V1 {v1 ? 'open' : 'shut'} · V2 {v2 ? 'open' : 'shut'}
+          {dirty ? ' · to the treatment chamber' : ' · straight out, untreated'}
+        </p>
+      </div>
+
+      <p className="text-xs text-muted">
+        This node judges on conductivity: it carries no pH probe and no TDS meter.
+      </p>
     </Card>
   );
 }
