@@ -50,15 +50,13 @@ interface Built {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   chamberWater: THREE.Mesh;
-  cleanWater: THREE.Mesh;
-  divertWater: THREE.Mesh;
   tankWater: THREE.Mesh;
   drumWater: THREE.Mesh;
   valves: Record<'V1' | 'V2' | 'V3', THREE.Mesh>;
   flows: Array<{ key: string; curve: THREE.CatmullRomCurve3; dots: THREE.Mesh[] }>;
   labels: Array<{ id: string; anchor: THREE.Vector3 }>;
   ground: THREE.Mesh;
-  dam: THREE.Mesh;
+  river: THREE.Mesh;
   disposables: Array<{ dispose: () => void }>;
 }
 
@@ -75,8 +73,6 @@ const FLOW_DOSE = { color: 0xe9d5ff, emissive: 0x9333ea };  // neutraliser dosin
 const CHAMBER_H = 2.2;
 const TANK_H = 1.7;
 const DRUM_H = 1.0;
-const CLEAN_H = 1.4;
-const DIVERT_H = 1.4;
 
 export function Plant3D({ v, limits, deviceName }: {
   v: PlantView;
@@ -197,8 +193,8 @@ export function Plant3D({ v, limits, deviceName }: {
   const resetCamera = () => {
     const b = builtRef.current;
     if (!b) return;
-    b.camera.position.set(7.4, 6.4, 10.2);
-    b.controls.target.set(0.4, 1.0, 0.2);
+    b.camera.position.set(9, 6.5, 10);
+    b.controls.target.set(0, 0.8, 0);
     b.controls.update();
   };
 
@@ -277,9 +273,7 @@ export function Plant3D({ v, limits, deviceName }: {
   );
 }
 
-const LABEL_IDS = [
-  'sump', 'chamber', 'V1', 'clean', 'V2', 'divert', 'tank', 'drum', 'V3', 'dam',
-] as const;
+const LABEL_IDS = ['sump', 'chamber', 'tank', 'drum', 'V1', 'V2', 'V3', 'river'] as const;
 
 /** Text for each floating label, from the current plant state. */
 function labelText(id: string, v: PlantView): string[] | null {
@@ -302,19 +296,13 @@ function labelText(id: string, v: PlantView): string[] | null {
     case 'drum':
       return ['NEUTRALISER', v.neutraliserPct === null ? '—' : `${Math.round(v.neutraliserPct)}%`];
     case 'V1':
-      return ['V1 · PASS GATE', v.v1 ? 'open — releasing' : 'shut'];
-    case 'clean':
-      return ['CLEAN WATER → DAM', v.v1 ? 'receiving a passed batch' : 'empty'];
+      return ['V1 → RIVER', v.v1 ? 'open' : 'shut'];
     case 'V2':
-      return ['V2 · DIVERT GATE', v.v2 ? 'open — diverting' : 'shut'];
-    case 'divert':
-      return ['DIVERSION → TREATMENT', v.v2 ? 'receiving a failed batch' : 'empty'];
+      return ['V2 → TANK', v.v2 ? 'open' : 'shut'];
     case 'V3':
-      return ['V3 · AFTER RE-TEST',
-        v.v3 ? 'open — releasing' : v.v3LockReason ? 'locked' : 'shut'];
-    case 'dam':
-      return ['DAM',
-        v.v1 ? 'receiving water that passed' : v.v3 ? 'receiving treated water that re-passed' : 'no discharge'];
+      return ['V3 → RIVER', v.v3 ? 'open' : v.v3LockReason ? 'locked' : 'shut'];
+    case 'river':
+      return ['RIVER', v.v1 ? 'receiving tested water' : v.v3 ? 'receiving treated water' : 'no discharge'];
     default:
       return null;
   }
@@ -346,14 +334,14 @@ function buildScene(mount: HTMLElement): Built {
   scene.fog = new THREE.Fog(dark ? 0x071523 : 0xf4f9fb, 22, 44);
 
   const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 100);
-  camera.position.set(7.4, 6.4, 10.2);
+  camera.position.set(9, 6.5, 10);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.target.set(0.4, 1.0, 0.2);
-  controls.minDistance = 5;
-  controls.maxDistance = 30;
+  controls.target.set(0, 0.8, 0);
+  controls.minDistance = 6;
+  controls.maxDistance = 26;
   controls.maxPolarAngle = Math.PI / 2.08;     // never go under the ground plane
   controls.update();
 
@@ -442,42 +430,31 @@ function buildScene(mount: HTMLElement): Built {
   };
 
   // ---------------------------------------------------------------- plant ---
-  // The layout is the argument: everything upstream of the check chamber is a
-  // single line, and everything downstream is two physically separate
-  // channels. A pass never touches the treatment side of the yard.
-  //   z < 0  ... pass channel   — clean water chamber, straight to the dam
-  //   z > 0  ... divert channel — diversion chamber, treatment, re-test
-  const PASS_Z = -2.2;
-  const FAIL_Z = 2.2;
-
   // Sump
   const sumpGeo = keep(new THREE.BoxGeometry(1.6, 0.9, 1.6));
   const sump = new THREE.Mesh(sumpGeo, steel);
-  sump.position.set(-7.2, 0.45, 0);
+  sump.position.set(-6.5, 0.45, 0);
   addEdges(sumpGeo, sump);
   scene.add(sump);
 
-  const chamber = vessel(1.0, CHAMBER_H, new THREE.Vector3(-4.4, 0, 0));
-  const clean = vessel(0.8, CLEAN_H, new THREE.Vector3(0.2, 0, PASS_Z));
-  const divert = vessel(0.8, DIVERT_H, new THREE.Vector3(0.2, 0, FAIL_Z));
-  const tank = vessel(1.25, TANK_H, new THREE.Vector3(3.6, 0, FAIL_Z));
-  const drum = vessel(0.42, DRUM_H, new THREE.Vector3(1.9, 0, 3.9));
+  const chamber = vessel(1.0, CHAMBER_H, new THREE.Vector3(-3.2, 0, 0));
+  const tank = vessel(1.5, TANK_H, new THREE.Vector3(3.0, 0, 2.6));
+  const drum = vessel(0.42, DRUM_H, new THREE.Vector3(1.0, 0, 3.6));
 
-  // Dam: a shallow slab with a gently moving surface. Both channels end here,
-  // which is the point — the dam only ever receives water that passed.
-  const damGeo = keep(new THREE.BoxGeometry(4.0, 0.18, 13));
-  const damMat = keep(new THREE.MeshStandardMaterial({
+  // River: a shallow slab with a gently moving surface
+  const riverGeo = keep(new THREE.BoxGeometry(4.0, 0.18, 12));
+  const riverMat = keep(new THREE.MeshStandardMaterial({
     color: 0x087ea4, transparent: true, opacity: 0.78, roughness: 0.22, metalness: 0.1,
   }));
-  const dam = new THREE.Mesh(damGeo, damMat);
-  dam.position.set(8.0, 0.09, 0);
-  scene.add(dam);
+  const river = new THREE.Mesh(riverGeo, riverMat);
+  river.position.set(7.6, 0.09, 0);
+  scene.add(river);
 
-  const bankGeo = keep(new THREE.BoxGeometry(4.6, 0.3, 13.6));
+  const bankGeo = keep(new THREE.BoxGeometry(4.6, 0.3, 12.6));
   const bank = new THREE.Mesh(bankGeo, keep(new THREE.MeshStandardMaterial({
     color: dark ? 0x132c42 : 0xcbdae2, roughness: 1,
   })));
-  bank.position.set(8.0, -0.02, 0);
+  bank.position.set(7.6, -0.02, 0);
   scene.add(bank);
 
   // ---------------------------------------------------------------- valves ---
@@ -499,11 +476,9 @@ function buildScene(mount: HTMLElement): Built {
     return mesh;
   };
 
-  // The two gates sit side by side at the split, so the decision reads as one
-  // fork rather than two unrelated pipes.
-  const v1 = makeValve(new THREE.Vector3(-2.2, 1.15, PASS_Z));
-  const v2 = makeValve(new THREE.Vector3(-2.2, 1.15, FAIL_Z));
-  const v3 = makeValve(new THREE.Vector3(5.8, 0.95, FAIL_Z));
+  const v1 = makeValve(new THREE.Vector3(0.2, 1.5, -1.9));
+  const v2 = makeValve(new THREE.Vector3(0.2, 1.0, 2.6));
+  const v3 = makeValve(new THREE.Vector3(5.2, 0.95, 2.6));
 
   // ----------------------------------------------------------------- pipes ---
   const pipeMat = keep(new THREE.MeshStandardMaterial({
@@ -520,41 +495,31 @@ function buildScene(mount: HTMLElement): Built {
 
   // sump -> chamber
   const cSump = pipe([
-    new THREE.Vector3(-7.2, 0.95, 0), new THREE.Vector3(-7.2, 1.9, 0),
-    new THREE.Vector3(-6.0, 2.15, 0), new THREE.Vector3(-5.1, 2.25, 0),
+    new THREE.Vector3(-6.5, 0.95, 0), new THREE.Vector3(-6.5, 1.9, 0),
+    new THREE.Vector3(-5.2, 2.15, 0), new THREE.Vector3(-3.9, 2.25, 0),
   ]);
-  // check chamber -> V1 -> clean water chamber   (the pass channel)
+  // chamber -> manifold -> V1 -> river
   const cV1 = pipe([
-    new THREE.Vector3(-4.4, 0.55, 0), new THREE.Vector3(-3.6, 0.6, -0.7),
-    new THREE.Vector3(-2.9, 0.9, -1.5), new THREE.Vector3(-2.2, 1.15, PASS_Z),
-    new THREE.Vector3(-1.0, 1.35, PASS_Z), new THREE.Vector3(0.2, 1.5, PASS_Z),
+    new THREE.Vector3(-3.2, 0.55, 0), new THREE.Vector3(-1.6, 0.55, 0),
+    new THREE.Vector3(-0.6, 1.0, -0.9), new THREE.Vector3(0.2, 1.5, -1.9),
+    new THREE.Vector3(2.6, 1.5, -2.4), new THREE.Vector3(5.4, 1.2, -2.0),
+    new THREE.Vector3(6.6, 0.7, -1.2), new THREE.Vector3(7.0, 0.35, -0.6),
   ]);
-  // clean water chamber -> dam
-  const cClean = pipe([
-    new THREE.Vector3(0.2, 0.5, PASS_Z), new THREE.Vector3(2.4, 0.55, PASS_Z),
-    new THREE.Vector3(4.8, 0.55, PASS_Z), new THREE.Vector3(6.6, 0.45, -1.6),
-    new THREE.Vector3(7.4, 0.35, -0.9),
-  ]);
-  // check chamber -> V2 -> diversion chamber   (the divert channel)
+  // chamber -> manifold -> V2 -> tank
   const cV2 = pipe([
-    new THREE.Vector3(-4.4, 0.55, 0), new THREE.Vector3(-3.6, 0.6, 0.7),
-    new THREE.Vector3(-2.9, 0.9, 1.5), new THREE.Vector3(-2.2, 1.15, FAIL_Z),
-    new THREE.Vector3(-1.0, 1.35, FAIL_Z), new THREE.Vector3(0.2, 1.5, FAIL_Z),
+    new THREE.Vector3(-3.2, 0.55, 0), new THREE.Vector3(-1.6, 0.55, 0),
+    new THREE.Vector3(-0.8, 0.8, 1.4), new THREE.Vector3(0.2, 1.0, 2.6),
+    new THREE.Vector3(1.4, 1.6, 2.6), new THREE.Vector3(2.4, 1.9, 2.6),
   ]);
-  // diversion chamber -> treatment tank
-  const cDivert = pipe([
-    new THREE.Vector3(0.2, 0.5, FAIL_Z), new THREE.Vector3(1.3, 0.7, FAIL_Z),
-    new THREE.Vector3(2.4, 1.4, FAIL_Z), new THREE.Vector3(3.1, 1.85, FAIL_Z),
-  ]);
-  // treatment tank -> V3 -> dam  (only after the re-test clears it)
+  // tank -> V3 -> river
   const cV3 = pipe([
-    new THREE.Vector3(5.0, 0.55, FAIL_Z), new THREE.Vector3(5.8, 0.95, FAIL_Z),
-    new THREE.Vector3(6.8, 0.7, 1.8), new THREE.Vector3(7.4, 0.35, 1.1),
+    new THREE.Vector3(4.4, 0.55, 2.6), new THREE.Vector3(5.2, 0.95, 2.6),
+    new THREE.Vector3(6.2, 0.8, 2.2), new THREE.Vector3(7.0, 0.35, 1.4),
   ]);
   // drum -> tank (dosing line, thinner)
   const cDose = pipe([
-    new THREE.Vector3(1.9, 1.0, 3.9), new THREE.Vector3(2.7, 1.9, 3.6),
-    new THREE.Vector3(3.4, 2.0, 3.1),
+    new THREE.Vector3(1.0, 1.0, 3.6), new THREE.Vector3(1.8, 1.9, 3.3),
+    new THREE.Vector3(2.6, 2.0, 2.9),
   ], 0.06);
 
   // ----------------------------------------------------------- flow markers ---
@@ -579,41 +544,35 @@ function buildScene(mount: HTMLElement): Built {
   };
 
   const flows = [
-    // Colour carries the meaning: water on its way to the dam is not the same
-    // event as water being pulled aside for treatment, and at a glance the two
-    // paths were previously indistinguishable.
+    // Colour carries the meaning: water on its way to the river is not the
+    // same event as water being pulled aside for treatment, and at a glance
+    // the two paths were previously indistinguishable.
     makeFlow('sump', cSump, 7, 1, FLOW_RAW),
-    makeFlow('v1', cV1, 6, 1, FLOW_PASS),        // passed -> clean water chamber
-    makeFlow('clean', cClean, 9, 1, FLOW_PASS),  // clean water chamber -> dam
-    makeFlow('v2', cV2, 6, 1, FLOW_FAIL),        // failed -> diversion chamber
-    makeFlow('divert', cDivert, 5, 1, FLOW_FAIL),// diversion chamber -> treatment
-    makeFlow('v3', cV3, 6, 1, FLOW_PASS),        // re-tested and cleared -> dam
+    makeFlow('v1', cV1, 10, 1, FLOW_PASS),     // tested, passed -> river
+    makeFlow('v2', cV2, 8, 1, FLOW_FAIL),      // failed -> treatment tank
+    makeFlow('v3', cV3, 6, 1, FLOW_PASS),      // treated and re-tested -> river
     makeFlow('dose', cDose, 4, 0.6, FLOW_DOSE),
   ];
 
   // --------------------------------------------------------------- labels ---
   const labels = [
-    { id: 'sump', anchor: new THREE.Vector3(-7.2, 1.5, 0) },
-    { id: 'chamber', anchor: new THREE.Vector3(-4.4, CHAMBER_H + 1.5, 0) },
-    { id: 'V1', anchor: new THREE.Vector3(-2.4, 0.35, PASS_Z - 0.9) },
-    { id: 'clean', anchor: new THREE.Vector3(0.2, CLEAN_H + 0.9, PASS_Z - 0.3) },
-    { id: 'V2', anchor: new THREE.Vector3(-2.2, 0.35, FAIL_Z + 0.9) },
-    { id: 'divert', anchor: new THREE.Vector3(0.2, DIVERT_H + 0.45, FAIL_Z + 0.2) },
-    { id: 'tank', anchor: new THREE.Vector3(3.6, TANK_H + 1.3, FAIL_Z) },
-    { id: 'drum', anchor: new THREE.Vector3(1.9, DRUM_H + 0.35, 3.9) },
-    { id: 'V3', anchor: new THREE.Vector3(5.9, 1.75, FAIL_Z + 0.3) },
-    { id: 'dam', anchor: new THREE.Vector3(8.0, 1.2, -4.2) },
+    { id: 'sump', anchor: new THREE.Vector3(-6.5, 1.5, 0) },
+    { id: 'chamber', anchor: new THREE.Vector3(-3.2, CHAMBER_H + 0.75, 0) },
+    { id: 'tank', anchor: new THREE.Vector3(3.0, TANK_H + 0.8, 2.6) },
+    { id: 'drum', anchor: new THREE.Vector3(1.0, DRUM_H + 0.5, 3.6) },
+    { id: 'V1', anchor: new THREE.Vector3(0.2, 2.15, -1.9) },
+    { id: 'V2', anchor: new THREE.Vector3(0.2, 1.65, 2.6) },
+    { id: 'V3', anchor: new THREE.Vector3(5.2, 1.6, 2.6) },
+    { id: 'river', anchor: new THREE.Vector3(7.6, 1.0, -4.2) },
   ];
 
   return {
     renderer, scene, camera, controls,
     chamberWater: chamber.water,
-    cleanWater: clean.water,
-    divertWater: divert.water,
     tankWater: tank.water,
     drumWater: drum.water,
     valves: { V1: v1, V2: v2, V3: v3 },
-    flows, labels, ground, dam, disposables,
+    flows, labels, ground, river, disposables,
   };
 }
 
@@ -623,18 +582,13 @@ function applyState(
   b: Built, v: PlantView, limits: Limits, t: number, dt: number, reduceMotion: boolean,
 ) {
   // ---- levels ------------------------------------------------------------
-  // A depth-gauged chamber reports how full it is directly; a metered one is
-  // a ratio of litres. Either way the vessel fills the same.
+  // A depth-gauged chamber — the bench rig's ultrasonic — reports how full it
+  // is directly; a metered one is a ratio of litres. Either way it fills.
   setLevel(b.chamberWater,
     typeof v.chamberFraction === 'number' ? v.chamberFraction : v.chamberL / Math.max(1, v.batchL),
     CHAMBER_H, dt);
   setLevel(b.tankWater, v.tankL / Math.max(1, v.tankCapL), TANK_H, dt);
   setLevel(b.drumWater, (v.neutraliserPct ?? 0) / 100, DRUM_H, dt);
-  // The two side chambers are pass-through, not metered: the controller
-  // reports no litres for them, so they show water present while their gate is
-  // open and drain once it shuts. Deliberately not dressed up as a reading.
-  setLevel(b.cleanWater, v.v1 && !v.offline ? 0.62 : 0, CLEAN_H, dt);
-  setLevel(b.divertWater, v.v2 && !v.offline ? 0.62 : 0, DIVERT_H, dt);
 
   // ---- colour by quality -------------------------------------------------
   (b.chamberWater.material as THREE.MeshStandardMaterial).color.setHex(
@@ -643,10 +597,6 @@ function applyState(
     waterColour(v.tankPh, null, limits));
   (b.drumWater.material as THREE.MeshStandardMaterial).color.setHex(
     (v.neutraliserPct ?? 0) <= 0 ? 0xef4444 : 0x14b8a6);
-  // These two never change colour: the whole point is that one channel only
-  // ever holds water that passed and the other only ever holds water that did not.
-  (b.cleanWater.material as THREE.MeshStandardMaterial).color.setHex(0x14b8a6);
-  (b.divertWater.material as THREE.MeshStandardMaterial).color.setHex(0xea580c);
 
   // ---- valves ------------------------------------------------------------
   setValve(b.valves.V1, v.v1, false, t, reduceMotion);
@@ -657,9 +607,7 @@ function applyState(
   const active: Record<string, boolean> = {
     sump: v.sumpPump,
     v1: v.v1,
-    clean: v.v1,
     v2: v.v2,
-    divert: v.v2,
     v3: v.v3,
     dose: v.dosingPump,
   };
@@ -675,11 +623,11 @@ function applyState(
     });
   }
 
-  // ---- dam surface -------------------------------------------------------
+  // ---- river surface -----------------------------------------------------
   const receiving = (v.v1 || v.v3) && !v.offline;
-  const damMat = b.dam.material as THREE.MeshStandardMaterial;
-  damMat.color.lerp(new THREE.Color(receiving ? 0x0ea5cf : 0x087ea4), 0.05);
-  if (!reduceMotion) b.dam.position.y = 0.09 + Math.sin(t * 1.1) * 0.012;
+  const riverMat = b.river.material as THREE.MeshStandardMaterial;
+  riverMat.color.lerp(new THREE.Color(receiving ? 0x0ea5cf : 0x087ea4), 0.05);
+  if (!reduceMotion) b.river.position.y = 0.09 + Math.sin(t * 1.1) * 0.012;
 }
 
 /**
