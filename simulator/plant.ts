@@ -151,6 +151,12 @@ export class Plant {
   injectAcid(ph = 3.8) { this.inflowPh = ph; }
   injectAlkaline(ph = 9.3) { this.inflowPh = ph; }
   injectSalt(tds = 1600) { this.inflowTds = tds; }
+  /**
+   * Clean feed: water that is already inside the release band. The batch
+   * passes, V1 opens and it goes to the river untreated — the other half of
+   * the story, which the fault buttons alone never show.
+   */
+  cleanInflow(ph = 7.1, tds = 430) { this.inflowPh = ph; this.inflowTds = tds; }
   stickProbe() { this.stuckAt = { ph: this.i.ph, tds: this.i.tds }; }
   unstickProbe() { this.stuckAt = null; }
 }

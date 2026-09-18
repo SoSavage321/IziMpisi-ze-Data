@@ -113,6 +113,7 @@ export const onLiveWrite = onValueWritten(
       lastCycle: lastCycle
         ? { end_tds: lastCycle.endTds ?? null, released_at: lastCycle.releasedAt ? toIso(lastCycle.releasedAt) : null }
         : null,
+      siteStock: await siteStock(device.siteId),
     };
 
     const active = evaluateAlarms(ctx);
@@ -354,6 +355,27 @@ async function heldSince(deviceId: string, now: number): Promise<string | null> 
   }
   void now;
   return null;
+}
+
+/**
+ * Neutraliser held in the store for a site. The drum on the plant and the
+ * store behind it are different things: the drum can read full while there is
+ * nothing left to refill it with, so the alarm engine is told both.
+ */
+async function siteStock(siteId?: string) {
+  if (!siteId) return null;
+  const snap = await db.collection('inventory')
+    .where('siteId', '==', siteId)
+    .get();
+  const doc = snap.docs.find((d) => String(d.data().item ?? '').includes('neutraliser'));
+  if (!doc) return null;
+  const d = doc.data();
+  return {
+    item: String(d.item),
+    stock: Number(d.stock ?? 0),
+    reorder_level: Number(d.reorderLevel ?? 0),
+    unit: String(d.unit ?? 'L'),
+  };
 }
 
 async function siteName(siteId?: string): Promise<string> {

@@ -332,6 +332,14 @@ class DemoStore {
     }
   }
 
+  /** The neutraliser held in the store for a site, for the stock alarms. */
+  private stockFor(siteId: string) {
+    const item = this.inventory.find((i) => i.site_id === siteId && i.item.includes('neutraliser'));
+    return item
+      ? { item: item.item, stock: item.stock, reorder_level: item.reorder_level, unit: item.unit }
+      : null;
+  }
+
   private runAlarms(device: DemoDevice, now: number) {
     const config = device.controller.config;
     const latest = device.telemetry[device.telemetry.length - 1];
@@ -346,6 +354,7 @@ class DemoStore {
       recentBatches: this.batches.filter((b) => b.device_id === device.id).slice(-20).reverse(),
       heldSince: latest.state === 'HOLD' ? iso(now - 60_000) : null,
       lastCycle: this.cycles.filter((c) => c.device_id === device.id).slice(-1)[0] ?? null,
+      siteStock: this.stockFor(device.site_id),
     });
 
     const open = this.alarms.filter((a) => a.device_id === device.id && !a.cleared_at && a.severity !== 'info');

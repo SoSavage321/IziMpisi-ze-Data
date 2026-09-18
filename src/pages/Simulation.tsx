@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Beaker, Droplet, FlaskConical, RefreshCw, Waves, Wifi, WifiOff,
+  Beaker, Droplet, FlaskConical, RefreshCw, Sparkles, Waves, Wifi, WifiOff,
 } from 'lucide-react';
 import { Controller } from '@shared/controller.ts';
 import { DEFAULT_CONFIG } from '@shared/types.ts';
@@ -188,6 +188,10 @@ export default function Simulation() {
 
   // ------------------------------------------------------------ actions ---
 
+  const cleanFeed = () => {
+    plantRef.current?.cleanInflow();
+    say('Clean water arriving at the sump — this batch should pass and go to the river', 'good');
+  };
   const contaminate = () => {
     plantRef.current?.injectAcid(3.6);
     say('Contamination enters the mine sump — pH falling', 'warn');
@@ -257,6 +261,7 @@ export default function Simulation() {
       <Card>
         <CardHead title="Push the plant around" hint="Each of these changes what is arriving at the sump" />
         <div className="flex flex-wrap gap-2">
+          <Button onClick={cleanFeed} variant="primary"><Sparkles className="h-4 w-4" />Clean water</Button>
           <Button onClick={contaminate}><Droplet className="h-4 w-4" />Acid contamination</Button>
           <Button onClick={alkalineSlug}><Waves className="h-4 w-4" />Alkaline slug</Button>
           <Button onClick={saltLoad}><FlaskConical className="h-4 w-4" />Salt load</Button>

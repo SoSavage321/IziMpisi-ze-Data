@@ -60,6 +60,16 @@ interface Built {
   disposables: Array<{ dispose: () => void }>;
 }
 
+/**
+ * What the marching dots mean, by colour. Raw water from the sump is not yet
+ * judged; a pass is on its way to the river; a fail has been pulled aside for
+ * treatment; the dosing line is the neutraliser itself.
+ */
+const FLOW_RAW  = { color: 0xbae6fd, emissive: 0x0284c7 };  // untested feed
+const FLOW_PASS = { color: 0x99f6e4, emissive: 0x14b8a6 };  // released to the river
+const FLOW_FAIL = { color: 0xfed7aa, emissive: 0xea580c };  // diverted to treatment
+const FLOW_DOSE = { color: 0xe9d5ff, emissive: 0x9333ea };  // neutraliser dosing
+
 const CHAMBER_H = 2.2;
 const TANK_H = 1.7;
 const DRUM_H = 1.0;
@@ -506,9 +516,12 @@ function buildScene(mount: HTMLElement): Built {
 
   // ----------------------------------------------------------- flow markers ---
   const dotGeo = keep(new THREE.SphereGeometry(0.085, 10, 8));
-  const makeFlow = (keyName: string, curve: THREE.CatmullRomCurve3, count = 7, size = 1) => {
+  const makeFlow = (
+    keyName: string, curve: THREE.CatmullRomCurve3, count = 7, size = 1,
+    tint: { color: number; emissive: number } = FLOW_PASS,
+  ) => {
     const mat = keep(new THREE.MeshStandardMaterial({
-      color: 0x99f6e4, emissive: new THREE.Color(0x14b8a6), emissiveIntensity: 0.9,
+      color: tint.color, emissive: new THREE.Color(tint.emissive), emissiveIntensity: 0.9,
       transparent: true, opacity: 0.95,
     }));
     const dots: THREE.Mesh[] = [];
@@ -523,11 +536,14 @@ function buildScene(mount: HTMLElement): Built {
   };
 
   const flows = [
-    makeFlow('sump', cSump),
-    makeFlow('v1', cV1, 10),
-    makeFlow('v2', cV2, 8),
-    makeFlow('v3', cV3, 6),
-    makeFlow('dose', cDose, 4, 0.6),
+    // Colour carries the meaning: water on its way to the river is not the
+    // same event as water being pulled aside for treatment, and at a glance
+    // the two paths were previously indistinguishable.
+    makeFlow('sump', cSump, 7, 1, FLOW_RAW),
+    makeFlow('v1', cV1, 10, 1, FLOW_PASS),     // tested, passed -> river
+    makeFlow('v2', cV2, 8, 1, FLOW_FAIL),      // failed -> treatment tank
+    makeFlow('v3', cV3, 6, 1, FLOW_PASS),      // treated and re-tested -> river
+    makeFlow('dose', cDose, 4, 0.6, FLOW_DOSE),
   ];
 
   // --------------------------------------------------------------- labels ---

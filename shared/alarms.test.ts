@@ -113,6 +113,45 @@ describe('sensor fault detection', () => {
 });
 
 describe('warning rules', () => {
+  it('raises stock_out when the store is empty, whatever the drum reads', () => {
+    const empty = { item: 'neutraliser (hydrated lime slurry)', stock: 0, reorder_level: 120, unit: 'L' };
+    // The drum on the plant is nearly full; the store behind it is not.
+    const t = types(ctx({ latest: sample({ neutraliser_pct: 80 }), siteStock: empty }));
+    expect(t).toContain('stock_out');
+    expect(t).not.toContain('stock_low');
+  });
+
+  it('warns on stock_low below the reorder level', () => {
+    const low = { item: 'neutraliser (hydrated lime slurry)', stock: 85, reorder_level: 120, unit: 'L' };
+    const t = types(ctx({ siteStock: low }));
+    expect(t).toContain('stock_low');
+    expect(t).not.toContain('stock_out');
+  });
+
+  it('stays quiet when the store is above the reorder level', () => {
+    const ok = { item: 'neutraliser (hydrated lime slurry)', stock: 340, reorder_level: 120, unit: 'L' };
+    const t = types(ctx({ siteStock: ok }));
+    expect(t).not.toContain('stock_low');
+    expect(t).not.toContain('stock_out');
+  });
+
+  it('still reports an empty store while the device is offline', () => {
+    // Stock is a fact about the store, not a reading, so a dead controller
+    // must not be able to hide it.
+    const t = types(ctx({
+      device: { id: 'd1', name: 'Sump 3 controller', last_seen: ago(120_000), flow_sensor: false },
+      siteStock: { item: 'neutraliser (hydrated lime slurry)', stock: 0, reorder_level: 120, unit: 'L' },
+    }));
+    expect(t).toContain('device_offline');
+    expect(t).toContain('stock_out');
+  });
+
+  it('says nothing about stock when no figure is supplied', () => {
+    const t = types(ctx());
+    expect(t).not.toContain('stock_low');
+    expect(t).not.toContain('stock_out');
+  });
+
   it('warns below the neutraliser reorder level but not at zero', () => {
     expect(types(ctx({ latest: sample({ neutraliser_pct: 15 }) }))).toContain('neutraliser_low');
     const empty = types(ctx({ latest: sample({ neutraliser_pct: 0 }) }));

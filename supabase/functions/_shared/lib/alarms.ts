@@ -60,6 +60,13 @@ export interface AlarmContext {
   calibrationOverdue?: { component: string; next_due_at: string } | null;
   /** The most recent completed treatment cycle. */
   lastCycle?: { end_tds: number | null; released_at: string | null } | null;
+  /**
+   * Neutraliser held in the store for this device's site. Distinct from
+   * latest.neutraliser_pct, which is the drum on the plant: the drum can read
+   * full while the store behind it is empty, and nobody finds out until the
+   * next refill is due. Omit when the caller has no stock figure.
+   */
+  siteStock?: { item: string; stock: number; reorder_level: number; unit: string } | null;
 }
 
 export const OFFLINE_AFTER_MS = 60_000;
@@ -77,12 +84,14 @@ export const TDS_RANGE: [number, number] = [0, 5000];
 /** Every condition the engine knows how to clear. Order is severity-first. */
 export const RULE_TYPES = [
   'neutraliser_empty',
+  'stock_out',
   'device_offline',
   'estop_active',
   'interlock_violation',
   'batch_held',
   'sensor_fault',
   'neutraliser_low',
+  'stock_low',
   'ph_high_chamber',
   'ph_high_tank',
   'tank_tds_high',
@@ -96,6 +105,25 @@ export function evaluateAlarms(ctx: AlarmContext): AlarmCandidate[] {
   const { latest, config, device, now } = ctx;
 
   // ------------------------------------------------------------- critical ---
+
+  const stock = ctx.siteStock;
+  if (stock) {
+    if (stock.stock <= 0) {
+      out.push({
+        type: 'stock_out',
+        severity: 'critical',
+        message: `No ${stock.item} left in the store — the next refill cannot be done and treatment stops when the drum empties`,
+        details: { item: stock.item, stock: stock.stock, reorder_level: stock.reorder_level, unit: stock.unit },
+      });
+    } else if (stock.stock < stock.reorder_level) {
+      out.push({
+        type: 'stock_low',
+        severity: 'warning',
+        message: `${stock.item} down to ${stock.stock} ${stock.unit} — below the ${stock.reorder_level} ${stock.unit} reorder level`,
+        details: { item: stock.item, stock: stock.stock, reorder_level: stock.reorder_level, unit: stock.unit },
+      });
+    }
+  }
 
   const lastSeenMs = device.last_seen ? Date.parse(device.last_seen) : null;
   if (lastSeenMs === null || now - lastSeenMs > OFFLINE_AFTER_MS) {
