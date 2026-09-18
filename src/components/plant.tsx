@@ -28,12 +28,14 @@ export interface PlantView {
   offline: boolean;
   v3LockReason: string | null;
   /**
-   * Set only by nodes that gauge the tank by depth rather than by volume, so
-   * the twin can fill the vessel without anyone claiming a litre figure the
-   * hardware never produced.
+   * Set only by nodes that gauge a vessel by depth rather than by volume, so
+   * the twin can fill it without anyone claiming a litre figure the hardware
+   * never produced. The bench rig's one ultrasonic head is over the check
+   * chamber.
    */
-  tankFraction?: number | null;
-  tankDepthCm?: number | null;
+  chamberFraction?: number | null;
+  chamberDepthCm?: number | null;
+  chamberFull?: boolean;
 }
 
 /** Quality -> the colour of the water in the vessel. */

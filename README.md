@@ -219,19 +219,50 @@ The rig reports conductivity, not pH:
 
 | Field | Shown as |
 |---|---|
-| `cond` (uS/cm) | TDS in mg/L, via the conventional EC x 0.5 (`VITE_PROTOTYPE_TDS_FACTOR` to change it) |
+| `cond` | the raw 0–1023 ADC count from the conductivity probe, as itself — it is not uS/cm and cannot become mg/L |
+| `risk` | contamination score out of 100; the divert decision is made on this |
+| `tankCm` | **the check chamber's** depth to surface. Despite the name, the one ultrasonic head is over the chamber, not the tank: below `CHAMBER_FULL_CM` the batch is full and ready to test |
 | `valve: RIVER` | V1 open, state *Discharging to river* |
-| `valve: TREATMENT` | V2 open, state *Diverting to tank* |
+| `valve: TANK` | V2 open, state *Diverting to tank* |
 | `alarm` | siren |
 | `timestamp` | stamped local with no offset, and both machines sit in Johannesburg, so it is parsed as local |
 
-**The rig carries no pH probe and no reagent level sensor.** Those two are
-marked unmeasured and the dashboard prints them as `—`. It would be easy to
-put a plausible number there, and wrong: this is real hardware, and the
-release rule is written on pH. On this node the RIVER/TREATMENT decision is
-being made on conductivity alone. `tankCm` is a depth, and without the tank's
-cross-section it cannot honestly become litres, so the level is known and the
-volume is not.
+What the rig actually does, which is narrower than the simulated plant:
+
+```
+SUMP -> CHECK CHAMBER            ultrasonic watches it fill
+          |                      conductivity probe tests the batch
+     +----+----+
+   PASS       FAIL
+     |          |
+   RIVER    CONTAMINATION CHAMBER -> dose pump (simulated) -> RIVER
+  (straight, untreated)
+```
+
+It tests for contamination only. The neutralising step is simulated, not
+plumbed. The valve returns to RIVER after `CONFIRM` consecutive clean samples
+of the incoming water — 1.5 s at the 500 ms loop.
+
+**The rig carries no pH probe, no TDS meter and no reagent level sensor.**
+Those are marked unmeasured and the dashboard prints them as `—`. It would be
+easy to put a plausible number there, and wrong: this is real hardware, and
+the release rule is written on pH. On this node the decision is made on
+conductivity alone. The chamber is gauged by depth, so the twin fills it from
+centimetres and never claims a litre figure. The treatment side has no
+instrument at all on this rig, so it reads as ungauged.
+
+Two constants in the sketch are still the placeholders the comment warns
+about:
+
+```c
+int COND_CLEAN = 700;
+int COND_DIRTY = 400;   // "replaced after the cup test"
+```
+
+With the probe reading ~1018, `dirtyScore` clamps to 0 on every sample, so
+`risk >= 50` can never be true and the valve can never leave RIVER. Run the
+cup test and set both from real samples, or the node will report PASS
+whatever is in the water.
 
 The prototype is also left out of the seven-day history seeder, so it carries
 no invented batches, litres or pass rate. It starts empty and fills from what

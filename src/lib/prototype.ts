@@ -31,21 +31,26 @@ export const PROTOTYPE_API =
 export const PROTOTYPE_DEVICE_ID = 'dev-proto';
 
 /**
- * The ultrasonic head looks DOWN at the water, so it returns the distance to
- * the surface: the smaller the reading, the fuller the tank. The sketch calls
- * it full below TANK_FULL_CM. The other end of the scale — the distance to a
- * dry bottom — is a property of how the rig is built and is not in the
- * firmware, so it is configurable and defaults to a plausible bench value.
+ * The ultrasonic head watches the CHECK CHAMBER, not the treatment tank. It
+ * looks down at the surface, so it returns the distance to the water: the
+ * smaller the reading, the fuller the chamber. Below CHAMBER_FULL_CM the
+ * chamber counts as full and the rig raises its alert.
+ *
+ * The sketch calls this field `tankCm` and its constant TANK_FULL_CM, which
+ * is what made it look like a tank gauge. It is the chamber.
+ *
+ * The distance to a dry bottom is a property of how the rig is built rather
+ * than anything in the firmware, so it is configurable.
  */
-export const TANK_FULL_CM = Number(import.meta.env.VITE_PROTOTYPE_TANK_FULL_CM ?? 4);
-export const TANK_EMPTY_CM = Number(import.meta.env.VITE_PROTOTYPE_TANK_EMPTY_CM ?? 20);
+export const CHAMBER_FULL_CM = Number(import.meta.env.VITE_PROTOTYPE_CHAMBER_FULL_CM ?? 4);
+export const CHAMBER_EMPTY_CM = Number(import.meta.env.VITE_PROTOTYPE_CHAMBER_EMPTY_CM ?? 20);
 
-/** Depth to the surface -> how full the tank is, 0..1. */
-export function tankFraction(tankCm: number | null): number | null {
-  if (tankCm === null || tankCm <= 0) return null;
-  const span = TANK_EMPTY_CM - TANK_FULL_CM;
+/** Depth to the surface -> how full the chamber is, 0..1. */
+export function chamberFraction(cm: number | null): number | null {
+  if (cm === null || cm <= 0) return null;
+  const span = CHAMBER_EMPTY_CM - CHAMBER_FULL_CM;
   if (span <= 0) return null;
-  return Math.max(0, Math.min(1, (TANK_EMPTY_CM - tankCm) / span));
+  return Math.max(0, Math.min(1, (CHAMBER_EMPTY_CM - cm) / span));
 }
 
 type Raw = Record<string, unknown>;
@@ -135,27 +140,28 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
   if (toTank || rawState === 'FAIL' || rawState === 'AMD') state = 'DIVERT';
   else if (toRiver || rawState === 'PASS') state = 'DISCHARGE';
 
-  const tankCm = num(raw, ['tankCm', 'tank_cm']);
+  // Named tankCm in the sketch, but the head is over the check chamber.
+  const chamberCm = num(raw, ['tankCm', 'tank_cm', 'chamberCm', 'chamber_cm']);
   const tempC = num(raw, ['tempC', 'temp_c', 'temperature']);
+  const chamberFrac = chamberFraction(chamberCm);
 
   const extra: Record<string, number | string | boolean> = {};
   if (risk !== null) extra.risk = risk;
   if (cond !== null) extra.cond = cond;
   if (tempC !== null) extra.tempC = tempC;
-  if (tankCm !== null) {
-    extra.tankCm = tankCm;
-    const frac = tankFraction(tankCm);
-    if (frac !== null) extra.tankFraction = frac;
+  if (chamberCm !== null) {
+    extra.chamberCm = chamberCm;
+    if (chamberFrac !== null) extra.chamberFraction = chamberFrac;
   }
-  if (pick(raw, ['tankFull']) !== undefined) extra.tankFull = bool(raw, ['tankFull']);
+  if (pick(raw, ['tankFull']) !== undefined) extra.chamberFull = bool(raw, ['tankFull']);
 
   const unmeasured: string[] = [];
   if (ph === null) unmeasured.push('ph');
   if (tds === null) unmeasured.push('tds');
   if (num(raw, ['neutraliser_pct', 'neutraliserPct', 'reagent_pct']) === null) unmeasured.push('neutraliser_pct');
-  // tankCm is a depth. Without the tank's cross-section it cannot become
-  // litres, so the level is known and the volume is not.
-  if (num(raw, ['tank_l', 'tankL']) === null) unmeasured.push('tank_l');
+  // Nothing gauges the treatment side on this rig: the one ultrasonic head is
+  // over the check chamber, so the tank's contents are genuinely unknown.
+  unmeasured.push('tank_l');
 
   return {
     ts,
@@ -166,6 +172,8 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
     // and the dashboard prints them as unknown.
     ph: ph ?? 7,
     tds: tds ?? 0,
+    // Gauged by depth, not volume: chamber_l stays 0 and the fraction in
+    // `extra` is what fills the vessel on screen.
     chamber_l: num(raw, ['chamber_l', 'chamberL', 'volume_l']) ?? 0,
     tank_l: num(raw, ['tank_l', 'tankL']) ?? 0,
     tank_cap_l: num(raw, ['tank_cap_l', 'tankCapL']) ?? 300,

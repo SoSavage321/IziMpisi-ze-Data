@@ -96,10 +96,11 @@ export default function SiteLive() {
     neutraliserPct: device.neutraliser_pct === null ? null : Number(device.neutraliser_pct),
     offline: device.offline,
     v3LockReason: v3Lock ?? null,
-    // The bench node gauges its tank with an ultrasonic head, so it reports a
-    // depth and a fraction rather than litres.
-    tankFraction: typeof latest?.extra?.tankFraction === 'number' ? latest.extra.tankFraction : null,
-    tankDepthCm: typeof latest?.extra?.tankCm === 'number' ? latest.extra.tankCm : null,
+    // The bench node gauges its check chamber with an ultrasonic head, so it
+    // reports a depth and a fraction rather than litres.
+    chamberFraction: typeof latest?.extra?.chamberFraction === 'number' ? latest.extra.chamberFraction : null,
+    chamberDepthCm: typeof latest?.extra?.chamberCm === 'number' ? latest.extra.chamberCm : null,
+    chamberFull: latest?.extra?.chamberFull === true,
   };
 
   return (
@@ -361,14 +362,14 @@ function BenchReadings({ extra }: { extra: Record<string, number | string | bool
   const risk = typeof extra.risk === 'number' ? extra.risk : null;
   const cond = typeof extra.cond === 'number' ? extra.cond : null;
   const tempC = typeof extra.tempC === 'number' ? extra.tempC : null;
-  const tankCm = typeof extra.tankCm === 'number' ? extra.tankCm : null;
-  const tankFull = extra.tankFull === true;
+  const chamberCm = typeof extra.chamberCm === 'number' ? extra.chamberCm : null;
+  const chamberFull = extra.chamberFull === true;
 
   return (
     <Card>
       <CardHead
         title="Bench rig readings"
-        hint="What this node actually measures — it carries no pH probe and no TDS meter"
+        hint="What this node actually measures. It tests for contamination only: no pH probe, no TDS meter, and the neutralising step is simulated."
       />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
@@ -388,9 +389,11 @@ function BenchReadings({ extra }: { extra: Record<string, number | string | bool
           <p className="tabular text-[22px] font-semibold text-ink">{tempC === null ? '—' : `${tempC.toFixed(1)} °C`}</p>
         </div>
         <div>
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Tank depth</p>
-          <p className="tabular text-[22px] font-semibold text-ink">{tankCm === null ? '—' : `${tankCm.toFixed(1)} cm`}</p>
-          <p className="text-xs text-muted">{tankFull ? 'float switch: full' : 'not full'}</p>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Chamber depth</p>
+          <p className="tabular text-[22px] font-semibold text-ink">{chamberCm === null ? '—' : `${chamberCm.toFixed(1)} cm`}</p>
+          <p className="text-xs text-muted">
+            {chamberFull ? 'chamber full — batch ready to test' : 'still filling'}
+          </p>
         </div>
       </div>
     </Card>
