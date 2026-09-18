@@ -286,15 +286,21 @@ function labelText(id: string, v: PlantView): string[] | null {
       if (typeof v.chamberDepthCm === 'number') {
         const pct = typeof v.chamberFraction === 'number' ? ` · ${Math.round(v.chamberFraction * 100)}%` : '';
         return ['CHECK CHAMBER', `${v.chamberDepthCm.toFixed(1)} cm to surface${pct}`,
-          v.chamberFull ? 'full — testing' : 'filling'];
+          v.qualityLine ?? (v.chamberFull ? 'full — testing' : 'filling')];
       }
-      return ['CHECK CHAMBER', `${num(v.chamberL)} / ${num(v.batchL)} L`, `pH ${fmtPh(v.ph)} · ${num(v.tds)} mg/L`];
+      return ['CHECK CHAMBER', `${num(v.chamberL)} / ${num(v.batchL)} L`,
+        v.qualityLine ?? `pH ${fmtPh(v.ph)} · ${num(v.tds)} mg/L`];
     }
     case 'tank':
+      if (v.tankReceiving && v.tankL === 0) {
+        return ['TREATMENT TANK', 'taking the failed batch', 'neutralising — not gauged on this node'];
+      }
       return ['TREATMENT TANK', `${num(v.tankL)} / ${num(v.tankCapL)} L`,
         v.tankL > 0 ? `pH ${fmtPh(v.tankPh)}${v.dosingPump ? ' · dosing' : ''}` : 'empty'];
     case 'drum':
-      return ['NEUTRALISER', v.neutraliserPct === null ? '—' : `${Math.round(v.neutraliserPct)}%`];
+      return ['NEUTRALISER',
+        v.neutraliserPct === null ? '—' : `${Math.round(v.neutraliserPct)}%`,
+        ...(v.reagentSimulated ? ['simulated'] : [])];
     case 'V1':
       return ['V1 → RIVER', v.v1 ? 'open' : 'shut'];
     case 'V2':
@@ -587,14 +593,22 @@ function applyState(
   setLevel(b.chamberWater,
     typeof v.chamberFraction === 'number' ? v.chamberFraction : v.chamberL / Math.max(1, v.batchL),
     CHAMBER_H, dt);
-  setLevel(b.tankWater, v.tankL / Math.max(1, v.tankCapL), TANK_H, dt);
+  setLevel(b.tankWater,
+    v.tankReceiving && v.tankL === 0 ? 0.55 : v.tankL / Math.max(1, v.tankCapL),
+    TANK_H, dt);
   setLevel(b.drumWater, (v.neutraliserPct ?? 0) / 100, DRUM_H, dt);
 
   // ---- colour by quality -------------------------------------------------
+  // A node that judges on conductivity has no pH to colour by, so its own
+  // verdict decides: red means this batch failed and is going to the tank.
   (b.chamberWater.material as THREE.MeshStandardMaterial).color.setHex(
-    waterColour(v.ph, v.tds, limits));
+    v.contaminated === true ? 0xef4444
+      : v.contaminated === false ? 0x087ea4
+      : waterColour(v.ph, v.tds, limits));
+  // Green while the neutraliser is working on the batch that failed: the
+  // colour is the treatment, not a pH reading.
   (b.tankWater.material as THREE.MeshStandardMaterial).color.setHex(
-    waterColour(v.tankPh, null, limits));
+    v.tankReceiving ? 0x22c55e : waterColour(v.tankPh, null, limits));
   (b.drumWater.material as THREE.MeshStandardMaterial).color.setHex(
     (v.neutraliserPct ?? 0) <= 0 ? 0xef4444 : 0x14b8a6);
 

@@ -36,6 +36,22 @@ export interface PlantView {
   chamberFraction?: number | null;
   chamberDepthCm?: number | null;
   chamberFull?: boolean;
+  /**
+   * Set by nodes that judge contamination without a pH probe — the bench rig
+   * decides on conductivity — so the twin can colour the water from the
+   * node's own verdict instead of from a pH it never measured.
+   */
+  contaminated?: boolean | null;
+  /** The treatment chamber is taking a failed batch and neutralising it. */
+  tankReceiving?: boolean;
+  /**
+   * What this node judges the water by, ready to print. A pH/TDS node leaves
+   * it unset and the twin prints the band; the bench rig sets it to its own
+   * conductivity figures, because a blank pH line says nothing.
+   */
+  qualityLine?: string | null;
+  /** The reagent level is acted, not gauged, on this node. */
+  reagentSimulated?: boolean;
 }
 
 /** Quality -> the colour of the water in the vessel. */

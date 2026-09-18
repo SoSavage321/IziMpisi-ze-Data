@@ -120,6 +120,86 @@ class DemoStore {
   private protoBackfilled = false;
 
   /**
+   * The bench rig tests and diverts for real, but it has no dosing pump and no
+   * release valve, and by agreement the neutralising step is simulated. This
+   * acts out the rest of the process around a real reading.
+   *
+   * It never decides that water is dirty. The rig's own verdict starts the
+   * sequence and the rig's own verdict ends it; everything here is what
+   * happens afterwards. All of it is flagged so the screen can say which half
+   * is measured and which half is acted.
+   *
+   *   SUMP PUMP -> the check chamber fills
+   *              -> full: the batch is tested
+   *        PASS  -> straight out to the river
+   *        FAIL  -> red, V2 opens, V1 shuts, the batch crosses to treatment
+   *              -> neutraliser doses it (green)
+   *              -> V3 opens and the treated batch goes to the river
+   */
+  private protoTreat: {
+    phase: 'idle' | 'filling' | 'dosing' | 'releasing';
+    since: number;
+    litres: number;
+    treated: boolean;
+    reagentPct: number;
+  } = { phase: 'idle', since: 0, litres: 0, treated: false, reagentPct: 100 };
+
+  private static readonly DOSE_MS = 8000;
+  private static readonly TANK_CAP_L = 300;
+
+  private simulateProcess(sample: Telemetry, now: number): Telemetry {
+    const t = this.protoTreat;
+    const contaminated = sample.extra?.contaminated === true;
+    const chamberFull = sample.extra?.chamberFull === true;
+    const chamberKnown = typeof sample.extra?.chamberCm === 'number';
+
+    if (contaminated) {
+      // The rig has the valve across: the failed batch is going to treatment.
+      if (t.phase !== 'filling') { t.phase = 'filling'; t.since = now; t.treated = false; }
+      t.litres = Math.min(DemoStore.TANK_CAP_L, t.litres + 6);
+    } else if (t.litres > 0) {
+      if (t.phase === 'filling') { t.phase = 'dosing'; t.since = now; }
+      else if (t.phase === 'dosing' && now - t.since > DemoStore.DOSE_MS) {
+        t.treated = true; t.phase = 'releasing'; t.since = now;
+      } else if (t.phase === 'releasing') {
+        t.litres = Math.max(0, t.litres - 12);
+        if (t.litres === 0) { t.phase = 'idle'; t.treated = false; }
+      }
+    } else {
+      t.phase = 'idle';
+    }
+
+    // Dosing draws the reservoir down, which is what makes the drum on the
+    // twin mean something. Simulated, like the dosing itself.
+    if (t.phase === 'dosing') t.reagentPct = Math.max(0, t.reagentPct - 0.6);
+
+    const extra = { ...(sample.extra ?? {}) };
+    extra.treatmentPhase = t.phase;
+    if (t.phase !== 'idle') extra.treatmentSimulated = true;
+
+    // While the chamber is still filling the sump is what is filling it.
+    const sumpPumping = chamberKnown ? !chamberFull : !contaminated && t.phase === 'idle';
+
+    return {
+      ...sample,
+      state: t.phase === 'dosing' ? 'TREAT' : t.phase === 'releasing' ? 'RELEASE' : sample.state,
+      sump_pump: sumpPumping,
+      tank_l: t.litres,
+      tank_cap_l: DemoStore.TANK_CAP_L,
+      // Acid going in, neutral coming out — the visible point of dosing.
+      tank_ph: t.litres === 0 ? 7 : t.treated ? 7.1 : 4.2,
+      dosing_pump: t.phase === 'dosing',
+      v3: t.phase === 'releasing',
+      neutraliser_pct: t.reagentPct,
+      // Green while the neutraliser is working on it, not once it is treated.
+      tank_receiving: t.phase === 'filling' || t.phase === 'dosing',
+      // tank_l is acted from here, so it is no longer merely unmeasured.
+      unmeasured: (sample.unmeasured ?? []).filter((f) => f !== 'neutraliser_pct' && !(t.phase !== 'idle' && f === 'tank_l')),
+      extra,
+    };
+  }
+
+  /**
    * Poll the bench API. Kept apart from tick() on purpose: tick() is
    * synchronous and must stay that way, and a bench that is switched off must
    * not be able to stall the simulated devices.
@@ -135,17 +215,18 @@ class DemoStore {
     const device = this.devices.find((d) => d.proto);
     if (!device) return;
 
+    const sample = await latestReading();
+
     // One backfill so the charts open with a line rather than a single dot.
-    if (!this.protoBackfilled) {
+    // After latestReading, so the clock offset it measures applies here too.
+    if (!this.protoBackfilled && sample) {
       this.protoBackfilled = true;
       const past = await readingHistory(200);
       if (past.length) {
         device.telemetry = past as Telemetry[];
-        device.last_seen = past[past.length - 1].ts;
+        device.last_seen = iso(Date.now());
       }
     }
-
-    const sample = await latestReading();
     // No sample means off, unreachable or CORS-blocked. Leave last_seen where
     // it is and the offline rule will say so on its own.
     if (!sample) return;
@@ -153,9 +234,13 @@ class DemoStore {
     const previous = device.telemetry[device.telemetry.length - 1];
     if (previous && previous.ts === sample.ts) return;   // same reading again
 
-    device.telemetry.push(sample);
+    device.telemetry.push(this.simulateProcess(sample, Date.now()));
     if (device.telemetry.length > 2400) device.telemetry.shift();
-    device.last_seen = sample.ts;
+    // Liveness is when the reading ARRIVED, not the clock stamped on it. The
+    // bridge sends a local time with no offset; if that clock is wrong, or is
+    // ever switched to UTC, trusting it would park the node permanently in
+    // the past and report a healthy rig as offline.
+    device.last_seen = iso(Date.now());
     this.runAlarms(device, Date.now());
     this.emit();
   }

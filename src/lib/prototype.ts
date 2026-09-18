@@ -56,6 +56,29 @@ export function chamberFraction(cm: number | null): number | null {
 type Raw = Record<string, unknown>;
 
 /**
+ * How far the bench clock is from this one.
+ *
+ * The bridge stamps a local time with no offset. If the bench PC's clock is
+ * out — wrong timezone, never synced, or simply behind — every reading lands
+ * outside the dashboard's telemetry window and the node goes blank while
+ * still streaming perfectly well. Measure the drift once per poll from the
+ * newest reading and shift every timestamp by it, which keeps the spacing
+ * between readings intact and puts the series where the clock here can see
+ * it. The stamp the rig actually sent is kept in `extra.rigTimestamp`.
+ */
+let clockOffsetMs = 0;
+
+/** Small differences are just latency; only a real clock gap is corrected. */
+const CLOCK_DRIFT_FLOOR_MS = 60_000;
+
+function stampOf(raw: Raw): number | null {
+  const v = pick(raw, ['timestamp', 'ts', 'time', 'created_at', 'receivedAt']);
+  if (typeof v === 'string' && !Number.isNaN(Date.parse(v))) return Date.parse(v);
+  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v;
+  return null;
+}
+
+/**
  * The firmware sketch and this dashboard were written by different people, so
  * rather than demand one spelling, look for any of the ones a reading could
  * plausibly arrive under — including one level of nesting, since Flask
@@ -125,10 +148,8 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
 
   // The bench stamps local time with no offset, and the bench and this
   // dashboard both sit in Johannesburg, so parsing it as local is correct.
-  const tsRaw = pick(raw, ['timestamp', 'ts', 'time', 'created_at', 'receivedAt']);
-  let ts = new Date(now).toISOString();
-  if (typeof tsRaw === 'string' && !Number.isNaN(Date.parse(tsRaw))) ts = new Date(tsRaw).toISOString();
-  else if (typeof tsRaw === 'number') ts = new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw).toISOString();
+  const stamped = stampOf(raw);
+  const ts = new Date((stamped ?? now) + clockOffsetMs).toISOString();
 
   // The sketch writes TANK; the event log prose says TREATMENT. Accept both.
   const valve = String(pick(raw, ['valve']) ?? '').toUpperCase();
@@ -136,9 +157,19 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
   const toRiver = valve.startsWith('RIV') || valve.startsWith('DAM');
 
   const rawState = String(pick(raw, ['state', 'status', 'phase']) ?? '').toUpperCase();
-  let state = rawState || 'TEST';
-  if (toTank || rawState === 'FAIL' || rawState === 'AMD') state = 'DIVERT';
-  else if (toRiver || rawState === 'PASS') state = 'DISCHARGE';
+  const contaminated = toTank || rawState === 'FAIL' || rawState === 'AMD';
+
+  // The batch is judged once the chamber is full: below that the node is still
+  // filling and its verdict is provisional. When the chamber gauge is dead the
+  // depth is unknown, so fall through to the verdict rather than claim FILL.
+  const chamberFullKnown = pick(raw, ['tankFull', 'chamberFull']) !== undefined;
+  const chamberFull = bool(raw, ['tankFull', 'chamberFull']);
+  const chamberCmKnown = num(raw, ['tankCm', 'tank_cm', 'chamberCm', 'chamber_cm']) !== null;
+
+  let state: string;
+  if (chamberCmKnown && chamberFullKnown && !chamberFull) state = 'FILL';
+  else if (contaminated) state = 'DIVERT';
+  else state = 'DISCHARGE';
 
   // Named tankCm in the sketch, but the head is over the check chamber.
   const chamberCm = num(raw, ['tankCm', 'tank_cm', 'chamberCm', 'chamber_cm']);
@@ -146,6 +177,13 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
   const chamberFrac = chamberFraction(chamberCm);
 
   const extra: Record<string, number | string | boolean> = {};
+  if (stamped !== null && clockOffsetMs !== 0) {
+    extra.rigTimestamp = new Date(stamped).toISOString();
+    extra.clockOffsetMinutes = Math.round(clockOffsetMs / 60_000);
+  }
+  // The node's own verdict on this batch. It has no pH probe, so this — not a
+  // pH band — is what makes the water red on screen.
+  extra.contaminated = contaminated;
   if (risk !== null) extra.risk = risk;
   if (cond !== null) extra.cond = cond;
   if (tempC !== null) extra.tempC = tempC;
@@ -175,6 +213,10 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
     // Gauged by depth, not volume: chamber_l stays 0 and the fraction in
     // `extra` is what fills the vessel on screen.
     chamber_l: num(raw, ['chamber_l', 'chamberL', 'volume_l']) ?? 0,
+    // While the node is diverting, the failed batch is crossing into the
+    // treatment chamber. The rig has no gauge there, so this shows that water
+    // has arrived, not how much: `tank_l` stays listed as unmeasured.
+    tank_receiving: contaminated,
     tank_l: num(raw, ['tank_l', 'tankL']) ?? 0,
     tank_cap_l: num(raw, ['tank_cap_l', 'tankCapL']) ?? 300,
     tank_ph: num(raw, ['tank_ph', 'tankPh']) ?? (ph ?? 7),
@@ -211,7 +253,15 @@ async function get(path: string, timeoutMs = 4000): Promise<unknown> {
 /** One reading, or null when the bench has nothing or cannot be reached. */
 export async function latestReading(): Promise<Telemetry | null> {
   const raw = await get('/api/readings/latest');
-  return raw && typeof raw === 'object' ? toTelemetry(raw as Raw) : null;
+  if (!raw || typeof raw !== 'object') return null;
+  // Re-measure the drift against the newest reading before mapping it, so a
+  // bench clock that is wrong or drifting does not hide the node.
+  const stamped = stampOf(raw as Raw);
+  if (stamped !== null) {
+    const drift = Date.now() - stamped;
+    clockOffsetMs = Math.abs(drift) > CLOCK_DRIFT_FLOOR_MS ? drift : 0;
+  }
+  return toTelemetry(raw as Raw);
 }
 
 /** Backfill, oldest first, so the charts have a line on first load. */

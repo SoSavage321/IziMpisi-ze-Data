@@ -101,6 +101,14 @@ export default function SiteLive() {
     chamberFraction: typeof latest?.extra?.chamberFraction === 'number' ? latest.extra.chamberFraction : null,
     chamberDepthCm: typeof latest?.extra?.chamberCm === 'number' ? latest.extra.chamberCm : null,
     chamberFull: latest?.extra?.chamberFull === true,
+    contaminated: typeof latest?.extra?.contaminated === 'boolean' ? latest.extra.contaminated : null,
+    tankReceiving: latest?.tank_receiving === true,
+    // The bench node judges on conductivity, so print its own numbers rather
+    // than an empty pH band.
+    qualityLine: typeof latest?.extra?.risk === 'number'
+      ? `risk ${latest.extra.risk}/100${typeof latest.extra.cond === 'number' ? ` · cond ${latest.extra.cond}` : ''}`
+      : null,
+    reagentSimulated: latest?.extra?.treatmentSimulated === true || typeof latest?.extra?.risk === 'number',
   };
 
   return (
@@ -364,6 +372,7 @@ function BenchReadings({ extra }: { extra: Record<string, number | string | bool
   const tempC = typeof extra.tempC === 'number' ? extra.tempC : null;
   const chamberCm = typeof extra.chamberCm === 'number' ? extra.chamberCm : null;
   const chamberFull = extra.chamberFull === true;
+  const phase = typeof extra.treatmentPhase === 'string' ? extra.treatmentPhase : null;
 
   return (
     <Card>
@@ -377,7 +386,9 @@ function BenchReadings({ extra }: { extra: Record<string, number | string | bool
           <p className="tabular text-[22px] font-semibold text-ink">
             {risk === null ? '—' : `${risk} / 100`}
           </p>
-          <p className="text-xs text-muted">{risk !== null && risk >= 50 ? 'above the divert threshold' : 'below the divert threshold'}</p>
+          <p className={cn('text-xs', extra.contaminated === true ? 'text-crit-ink' : 'text-muted')}>
+            {extra.contaminated === true ? 'contaminated — diverting to the tank' : 'clean — straight to the river'}
+          </p>
         </div>
         <div>
           <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Conductivity probe</p>
@@ -396,6 +407,18 @@ function BenchReadings({ extra }: { extra: Record<string, number | string | bool
           </p>
         </div>
       </div>
+
+      {phase && phase !== 'idle' ? (
+        <div className="mt-4 rounded-lg border border-line bg-raised px-3 py-2 text-sm">
+          <span className="font-medium text-ink">
+            {phase === 'filling' ? 'Failed batch crossing to the treatment chamber'
+              : phase === 'dosing' ? 'Neutraliser dosing the batch'
+              : 'Releasing the treated batch to the river'}
+          </span>
+          <span className="text-muted"> — simulated. The rig fills, tests and diverts for real; it
+            has no dosing pump and no release valve, so everything after the divert is acted out.</span>
+        </div>
+      ) : null}
     </Card>
   );
 }
