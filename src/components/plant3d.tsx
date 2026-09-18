@@ -197,8 +197,8 @@ export function Plant3D({ v, limits, deviceName }: {
   const resetCamera = () => {
     const b = builtRef.current;
     if (!b) return;
-    b.camera.position.set(6.6, 5.4, 9.0);
-    b.controls.target.set(0.2, 0.9, 0);
+    b.camera.position.set(7.4, 6.4, 10.2);
+    b.controls.target.set(0.4, 1.0, 0.2);
     b.controls.update();
   };
 
@@ -338,12 +338,12 @@ function buildScene(mount: HTMLElement): Built {
   scene.fog = new THREE.Fog(dark ? 0x071523 : 0xf4f9fb, 22, 44);
 
   const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 100);
-  camera.position.set(6.6, 5.4, 9.0);
+  camera.position.set(7.4, 6.4, 10.2);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.target.set(0.2, 0.9, 0);
+  controls.target.set(0.4, 1.0, 0.2);
   controls.minDistance = 5;
   controls.maxDistance = 30;
   controls.maxPolarAngle = Math.PI / 2.08;     // never go under the ground plane
@@ -452,7 +452,7 @@ function buildScene(mount: HTMLElement): Built {
   const chamber = vessel(1.0, CHAMBER_H, new THREE.Vector3(-4.4, 0, 0));
   const clean = vessel(0.8, CLEAN_H, new THREE.Vector3(0.2, 0, PASS_Z));
   const divert = vessel(0.8, DIVERT_H, new THREE.Vector3(0.2, 0, FAIL_Z));
-  const tank = vessel(1.5, TANK_H, new THREE.Vector3(3.6, 0, FAIL_Z));
+  const tank = vessel(1.25, TANK_H, new THREE.Vector3(3.6, 0, FAIL_Z));
   const drum = vessel(0.42, DRUM_H, new THREE.Vector3(1.9, 0, 3.9));
 
   // Dam: a shallow slab with a gently moving surface. Both channels end here,
@@ -593,7 +593,7 @@ function buildScene(mount: HTMLElement): Built {
     { id: 'divert', anchor: new THREE.Vector3(0.2, DIVERT_H + 0.45, FAIL_Z + 0.2) },
     { id: 'tank', anchor: new THREE.Vector3(3.6, TANK_H + 1.3, FAIL_Z) },
     { id: 'drum', anchor: new THREE.Vector3(1.9, DRUM_H + 0.35, 3.9) },
-    { id: 'V3', anchor: new THREE.Vector3(5.8, 0.3, FAIL_Z + 0.6) },
+    { id: 'V3', anchor: new THREE.Vector3(5.9, 1.75, FAIL_Z + 0.3) },
     { id: 'dam', anchor: new THREE.Vector3(8.0, 1.2, -4.2) },
   ];
 
