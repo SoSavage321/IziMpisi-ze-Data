@@ -14,6 +14,10 @@ import { Controller } from '@shared/controller.ts';
 import { DEFAULT_CONFIG } from '@shared/types.ts';
 import { evaluateAlarms, reconcile, type ExistingAlarm } from '@shared/alarms.ts';
 import { PROTOTYPE_DEVICE_ID, latestReading, readingHistory } from './prototype.ts';
+import {
+  TANK_CAP_L, initialTreatment, isDosing, isReleasing, stepTreatment,
+  type TreatmentState,
+} from './treatment.ts';
 import { Plant } from '../../simulator/plant.ts';
 import type {
   Alarm, AuditRow, Batch, Command, DeviceConfig, DeviceEventRow, FleetRow,
@@ -136,65 +140,50 @@ class DemoStore {
    *              -> neutraliser doses it (green)
    *              -> V3 opens and the treated batch goes to the river
    */
-  private protoTreat: {
-    phase: 'idle' | 'filling' | 'dosing' | 'releasing';
-    since: number;
-    litres: number;
-    treated: boolean;
-    reagentPct: number;
-  } = { phase: 'idle', since: 0, litres: 0, treated: false, reagentPct: 100 };
+  private protoTreat: TreatmentState = initialTreatment();
 
-  private static readonly DOSE_MS = 8000;
-  private static readonly TANK_CAP_L = 300;
-
+  /**
+   * Sequence the simulated stages around a real reading.
+   *
+   * The rules live in ./treatment.ts and are unit tested there; this only
+   * feeds the node's verdict in and paints the result onto the telemetry the
+   * dashboard already understands.
+   */
   private simulateProcess(sample: Telemetry, now: number): Telemetry {
-    const t = this.protoTreat;
     const contaminated = sample.extra?.contaminated === true;
-    const chamberFull = sample.extra?.chamberFull === true;
-    const chamberKnown = typeof sample.extra?.chamberCm === 'number';
+    const tankCm = typeof sample.extra?.tankCm === 'number' ? sample.extra.tankCm : null;
 
-    if (contaminated) {
-      // The rig has the valve across: the failed batch is going to treatment.
-      if (t.phase !== 'filling') { t.phase = 'filling'; t.since = now; t.treated = false; }
-      t.litres = Math.min(DemoStore.TANK_CAP_L, t.litres + 6);
-    } else if (t.litres > 0) {
-      if (t.phase === 'filling') { t.phase = 'dosing'; t.since = now; }
-      else if (t.phase === 'dosing' && now - t.since > DemoStore.DOSE_MS) {
-        t.treated = true; t.phase = 'releasing'; t.since = now;
-      } else if (t.phase === 'releasing') {
-        t.litres = Math.max(0, t.litres - 12);
-        if (t.litres === 0) { t.phase = 'idle'; t.treated = false; }
-      }
-    } else {
-      t.phase = 'idle';
-    }
-
-    // Dosing draws the reservoir down, which is what makes the drum on the
-    // twin mean something. Simulated, like the dosing itself.
-    if (t.phase === 'dosing') t.reagentPct = Math.max(0, t.reagentPct - 0.6);
+    this.protoTreat = stepTreatment(this.protoTreat, { contaminated, tankCm, now });
+    const t = this.protoTreat;
+    const dosing = isDosing(t);
+    const releasing = isReleasing(t);
 
     const extra = { ...(sample.extra ?? {}) };
     extra.treatmentPhase = t.phase;
+    extra.treatmentChamberFull = t.fullConfirmed;
     if (t.phase !== 'idle') extra.treatmentSimulated = true;
 
-    // While the chamber is still filling the sump is what is filling it.
-    const sumpPumping = chamberKnown ? !chamberFull : !contaminated && t.phase === 'idle';
+    // The sump feeds the check chamber whenever the check chamber has room.
+    const chamberFull = sample.extra?.chamberFull === true;
+    const chamberKnown = typeof sample.extra?.chamberCm === 'number';
 
     return {
       ...sample,
-      state: t.phase === 'dosing' ? 'TREAT' : t.phase === 'releasing' ? 'RELEASE' : sample.state,
-      sump_pump: sumpPumping,
+      state: t.phase === 'dosing' ? 'TREAT' : releasing ? 'RELEASE' : sample.state,
+      sump_pump: chamberKnown ? !chamberFull : true,
       tank_l: t.litres,
-      tank_cap_l: DemoStore.TANK_CAP_L,
+      tank_cap_l: TANK_CAP_L,
       // Acid going in, neutral coming out — the visible point of dosing.
       tank_ph: t.litres === 0 ? 7 : t.treated ? 7.1 : 4.2,
-      dosing_pump: t.phase === 'dosing',
-      v3: t.phase === 'releasing',
+      // A pump, not a valve: it treats what is already in the chamber and
+      // never moves water between stages.
+      dosing_pump: dosing,
+      // V3 opens only once the batch has been dosed, never during it.
+      v3: releasing,
       neutraliser_pct: t.reagentPct,
-      // Green while the neutraliser is working on it, not once it is treated.
-      tank_receiving: t.phase === 'filling' || t.phase === 'dosing',
-      // tank_l is acted from here, so it is no longer merely unmeasured.
-      unmeasured: (sample.unmeasured ?? []).filter((f) => f !== 'neutraliser_pct' && !(t.phase !== 'idle' && f === 'tank_l')),
+      tank_receiving: dosing,
+      unmeasured: (sample.unmeasured ?? []).filter(
+        (f) => f !== 'neutraliser_pct' && !(t.phase !== 'idle' && f === 'tank_l')),
       extra,
     };
   }

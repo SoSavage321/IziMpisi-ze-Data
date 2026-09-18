@@ -189,6 +189,7 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
   if (tempC !== null) extra.tempC = tempC;
   if (chamberCm !== null) {
     extra.chamberCm = chamberCm;
+    extra.tankCm = chamberCm;      // the raw figure, for the fullness timer
     if (chamberFrac !== null) extra.chamberFraction = chamberFrac;
   }
   if (pick(raw, ['tankFull']) !== undefined) extra.chamberFull = bool(raw, ['tankFull']);
@@ -222,9 +223,15 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
     tank_ph: num(raw, ['tank_ph', 'tankPh']) ?? (ph ?? 7),
     tank_tds: num(raw, ['tank_tds', 'tankTds']) ?? (tds ?? 0),
     neutraliser_pct: num(raw, ['neutraliser_pct', 'neutraliserPct', 'reagent_pct']) ?? 100,
-    v1: bool(raw, ['v1', 'V1', 'valve1']) || toRiver,
-    v2: bool(raw, ['v2', 'V2', 'valve2']) || toTank,
-    v3: bool(raw, ['v3', 'V3', 'valve3']),
+    // Routing follows the QUALITY STATE, not the valve string. The rig debounces
+    // its servo over CONFIRM samples, so `state` can read FAIL while `valve`
+    // still says RIVER — and for those samples the river gate must already be
+    // shut. PASS opens V1 and only V1; FAIL opens V2 and only V2.
+    v1: !contaminated,
+    v2: contaminated,
+    // V3 belongs to the treatment cycle, never to the incoming reading: it
+    // opens only once the batch in the treatment chamber has been dosed.
+    v3: false,
     sump_pump: bool(raw, ['sump_pump', 'sumpPump', 'pump']),
     dosing_pump: bool(raw, ['dosing_pump', 'dosingPump', 'doser']),
     siren: bool(raw, ['alarm', 'siren', 'buzzer']),
