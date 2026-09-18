@@ -87,6 +87,12 @@ export interface Telemetry {
    * here must be shown as unknown rather than reported as a reading.
    */
   unmeasured?: string[];
+  /**
+   * Readings a device takes that this schema has no column for — the bench
+   * rig's contamination score, probe temperature and tank depth. Shown as
+   * themselves rather than forced into a field that means something else.
+   */
+  extra?: Record<string, number | string | boolean>;
 }
 
 export interface Batch {

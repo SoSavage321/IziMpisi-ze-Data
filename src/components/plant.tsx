@@ -27,6 +27,13 @@ export interface PlantView {
   neutraliserPct: number | null;
   offline: boolean;
   v3LockReason: string | null;
+  /**
+   * Set only by nodes that gauge the tank by depth rather than by volume, so
+   * the twin can fill the vessel without anyone claiming a litre figure the
+   * hardware never produced.
+   */
+  tankFraction?: number | null;
+  tankDepthCm?: number | null;
 }
 
 /** Quality -> the colour of the water in the vessel. */

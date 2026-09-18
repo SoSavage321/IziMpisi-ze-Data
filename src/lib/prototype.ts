@@ -30,6 +30,24 @@ export const PROTOTYPE_API =
 
 export const PROTOTYPE_DEVICE_ID = 'dev-proto';
 
+/**
+ * The ultrasonic head looks DOWN at the water, so it returns the distance to
+ * the surface: the smaller the reading, the fuller the tank. The sketch calls
+ * it full below TANK_FULL_CM. The other end of the scale — the distance to a
+ * dry bottom — is a property of how the rig is built and is not in the
+ * firmware, so it is configurable and defaults to a plausible bench value.
+ */
+export const TANK_FULL_CM = Number(import.meta.env.VITE_PROTOTYPE_TANK_FULL_CM ?? 4);
+export const TANK_EMPTY_CM = Number(import.meta.env.VITE_PROTOTYPE_TANK_EMPTY_CM ?? 20);
+
+/** Depth to the surface -> how full the tank is, 0..1. */
+export function tankFraction(tankCm: number | null): number | null {
+  if (tankCm === null || tankCm <= 0) return null;
+  const span = TANK_EMPTY_CM - TANK_FULL_CM;
+  if (span <= 0) return null;
+  return Math.max(0, Math.min(1, (TANK_EMPTY_CM - tankCm) / span));
+}
+
 type Raw = Record<string, unknown>;
 
 /**
@@ -70,38 +88,35 @@ function bool(raw: Raw, names: string[]): boolean {
 }
 
 /**
- * Electrical conductivity to dissolved solids. The rig ships a conductivity
- * cell, not a TDS meter, and the conventional conversion is EC in uS/cm times
- * a factor between 0.5 and 0.7 depending on which salts dominate. 0.5 is the
- * usual default and the conservative end for mine water. Override with
- * VITE_PROTOTYPE_TDS_FACTOR if the rig is calibrated against a known sample.
- */
-export const TDS_FACTOR = Number(import.meta.env.VITE_PROTOTYPE_TDS_FACTOR ?? 0.5);
-
-/**
  * Whatever the bench sent -> the Telemetry the dashboard renders.
  *
- * The rig reports:
- *   cond      conductivity in uS/cm      -> TDS, via TDS_FACTOR
- *   valve     "RIVER" | "TREATMENT"      -> which gate is open
- *   state     "PASS" and friends         -> the plant state
- *   tankCm    depth in the tank          -> level only, no volume: see below
- *   tankFull  float switch
- *   alarm     buzzer
- *   tempC     probe temperature
- *   risk      the sketch's own 0..n score
+ * From the sketch (AcidShield node, Arduino Uno), one JSON line per 500 ms:
  *
- * It has no pH probe and no reagent level sensor, so those two are marked
- * unmeasured and the dashboard shows them as unknown. Putting a plausible
- * number there would be inventing a reading on real hardware.
+ *   cond      analogRead(A1) averaged over 10 samples — a raw 0..1023 ADC
+ *             count from the conductivity probe, NOT uS/cm and NOT mg/L
+ *   risk      dirtyScore(cond, COND_CLEAN, COND_DIRTY), 0..100, the rig's own
+ *             calibrated contamination score; >= 50 counts as bad
+ *   state     "PASS" | "FAIL", after CONFIRM consecutive agreeing samples
+ *   valve     "RIVER" | "TANK"
+ *   tankCm    ultrasonic depth, or null when the echo times out
+ *   tankFull  tankCm below TANK_FULL_CM
+ *   tempC     thermistor, or null when the divider reads rail-to-rail
+ *   alarm     buzzer and LED, set by failing || tankFull
+ *
+ * What this rig does NOT have: a pH probe, a TDS meter, and any reagent level
+ * sensor. `cond` is an ADC count on an uncalibrated scale, so it cannot be
+ * turned into mg/L without a two-point calibration against known solutions —
+ * a number derived from it would look like a measurement and be nothing of
+ * the kind. pH, TDS and reagent level are therefore all reported unmeasured,
+ * and the rig's own risk score is carried through as itself.
  */
 export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
-  const cond = num(raw, ['cond', 'conductivity', 'ec', 'EC', 'uscm']);
+  const cond = num(raw, ['cond', 'conductivity']);
+  const risk = num(raw, ['risk']);
   const ph = num(raw, ['ph', 'pH', 'PH', 'ph_value']);
-  const tdsDirect = num(raw, ['tds', 'TDS', 'tds_ppm']);
-  const tds = tdsDirect ?? (cond === null ? null : Math.round(cond * TDS_FACTOR));
-  // Nothing measurable in this payload at all.
-  if (ph === null && tds === null) return null;
+  const tds = num(raw, ['tds', 'TDS', 'tds_ppm']);
+  // A payload with none of these is not a reading.
+  if (cond === null && risk === null && ph === null && tds === null) return null;
 
   // The bench stamps local time with no offset, and the bench and this
   // dashboard both sit in Johannesburg, so parsing it as local is correct.
@@ -110,23 +125,36 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
   if (typeof tsRaw === 'string' && !Number.isNaN(Date.parse(tsRaw))) ts = new Date(tsRaw).toISOString();
   else if (typeof tsRaw === 'number') ts = new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw).toISOString();
 
+  // The sketch writes TANK; the event log prose says TREATMENT. Accept both.
   const valve = String(pick(raw, ['valve']) ?? '').toUpperCase();
-  const toTreatment = valve.startsWith('TREAT');
+  const toTank = valve.startsWith('TANK') || valve.startsWith('TREAT');
   const toRiver = valve.startsWith('RIV') || valve.startsWith('DAM');
 
   const rawState = String(pick(raw, ['state', 'status', 'phase']) ?? '').toUpperCase();
-  // The rig's own words, translated into states this dashboard already draws.
   let state = rawState || 'TEST';
-  if (toTreatment) state = 'DIVERT';
-  else if (toRiver && (rawState === 'PASS' || rawState === '')) state = 'DISCHARGE';
-  else if (rawState === 'PASS') state = 'DISCHARGE';
-  else if (rawState === 'AMD' || rawState === 'FAIL') state = 'DIVERT';
+  if (toTank || rawState === 'FAIL' || rawState === 'AMD') state = 'DIVERT';
+  else if (toRiver || rawState === 'PASS') state = 'DISCHARGE';
+
+  const tankCm = num(raw, ['tankCm', 'tank_cm']);
+  const tempC = num(raw, ['tempC', 'temp_c', 'temperature']);
+
+  const extra: Record<string, number | string | boolean> = {};
+  if (risk !== null) extra.risk = risk;
+  if (cond !== null) extra.cond = cond;
+  if (tempC !== null) extra.tempC = tempC;
+  if (tankCm !== null) {
+    extra.tankCm = tankCm;
+    const frac = tankFraction(tankCm);
+    if (frac !== null) extra.tankFraction = frac;
+  }
+  if (pick(raw, ['tankFull']) !== undefined) extra.tankFull = bool(raw, ['tankFull']);
 
   const unmeasured: string[] = [];
   if (ph === null) unmeasured.push('ph');
+  if (tds === null) unmeasured.push('tds');
   if (num(raw, ['neutraliser_pct', 'neutraliserPct', 'reagent_pct']) === null) unmeasured.push('neutraliser_pct');
-  // tankCm is a depth, and without the tank's cross-section it cannot honestly
-  // become litres, so the volume stays unknown even though the level is known.
+  // tankCm is a depth. Without the tank's cross-section it cannot become
+  // litres, so the level is known and the volume is not.
   if (num(raw, ['tank_l', 'tankL']) === null) unmeasured.push('tank_l');
 
   return {
@@ -134,7 +162,9 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
     state,
     mode: 'AUTO',
     estop: bool(raw, ['estop', 'e_stop', 'emergency_stop']),
-    ph: ph ?? 7,                       // inert placeholder; listed in unmeasured
+    // Placeholders the control types demand; both are listed in `unmeasured`
+    // and the dashboard prints them as unknown.
+    ph: ph ?? 7,
     tds: tds ?? 0,
     chamber_l: num(raw, ['chamber_l', 'chamberL', 'volume_l']) ?? 0,
     tank_l: num(raw, ['tank_l', 'tankL']) ?? 0,
@@ -143,7 +173,7 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
     tank_tds: num(raw, ['tank_tds', 'tankTds']) ?? (tds ?? 0),
     neutraliser_pct: num(raw, ['neutraliser_pct', 'neutraliserPct', 'reagent_pct']) ?? 100,
     v1: bool(raw, ['v1', 'V1', 'valve1']) || toRiver,
-    v2: bool(raw, ['v2', 'V2', 'valve2']) || toTreatment,
+    v2: bool(raw, ['v2', 'V2', 'valve2']) || toTank,
     v3: bool(raw, ['v3', 'V3', 'valve3']),
     sump_pump: bool(raw, ['sump_pump', 'sumpPump', 'pump']),
     dosing_pump: bool(raw, ['dosing_pump', 'dosingPump', 'doser']),
@@ -152,6 +182,7 @@ export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
     wifi_rssi: num(raw, ['wifi_rssi', 'rssi']) ?? -50,
     uptime_s: num(raw, ['uptime_s', 'uptime']) ?? 0,
     unmeasured,
+    extra: Object.keys(extra).length ? extra : undefined,
   };
 }
 

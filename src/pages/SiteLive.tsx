@@ -96,6 +96,10 @@ export default function SiteLive() {
     neutraliserPct: device.neutraliser_pct === null ? null : Number(device.neutraliser_pct),
     offline: device.offline,
     v3LockReason: v3Lock ?? null,
+    // The bench node gauges its tank with an ultrasonic head, so it reports a
+    // depth and a fraction rather than litres.
+    tankFraction: typeof latest?.extra?.tankFraction === 'number' ? latest.extra.tankFraction : null,
+    tankDepthCm: typeof latest?.extra?.tankCm === 'number' ? latest.extra.tankCm : null,
   };
 
   return (
@@ -118,6 +122,8 @@ export default function SiteLive() {
           </Link>
         </div>
       </header>
+
+      {latest?.extra ? <BenchReadings extra={latest.extra} /> : null}
 
       {device.estop ? (
         <div className="rounded-xl border border-crit bg-crit/10 p-4">
@@ -344,4 +350,49 @@ function describeEvent(type: string, details: Record<string, unknown>): string {
     case 'BOOT': return `controller booted on configuration version ${details.config_version}`;
     default: return `${type} ${JSON.stringify(details)}`;
   }
+}
+
+/**
+ * What the bench rig measures that this schema has no column for. Shown as
+ * the rig reports it, units and all, rather than converted into pH or mg/L
+ * that the hardware cannot actually produce.
+ */
+function BenchReadings({ extra }: { extra: Record<string, number | string | boolean> }) {
+  const risk = typeof extra.risk === 'number' ? extra.risk : null;
+  const cond = typeof extra.cond === 'number' ? extra.cond : null;
+  const tempC = typeof extra.tempC === 'number' ? extra.tempC : null;
+  const tankCm = typeof extra.tankCm === 'number' ? extra.tankCm : null;
+  const tankFull = extra.tankFull === true;
+
+  return (
+    <Card>
+      <CardHead
+        title="Bench rig readings"
+        hint="What this node actually measures — it carries no pH probe and no TDS meter"
+      />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Contamination risk</p>
+          <p className="tabular text-[22px] font-semibold text-ink">
+            {risk === null ? '—' : `${risk} / 100`}
+          </p>
+          <p className="text-xs text-muted">{risk !== null && risk >= 50 ? 'above the divert threshold' : 'below the divert threshold'}</p>
+        </div>
+        <div>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Conductivity probe</p>
+          <p className="tabular text-[22px] font-semibold text-ink">{cond === null ? '—' : cond}</p>
+          <p className="text-xs text-muted">raw ADC count, 0–1023</p>
+        </div>
+        <div>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Probe temperature</p>
+          <p className="tabular text-[22px] font-semibold text-ink">{tempC === null ? '—' : `${tempC.toFixed(1)} °C`}</p>
+        </div>
+        <div>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted">Tank depth</p>
+          <p className="tabular text-[22px] font-semibold text-ink">{tankCm === null ? '—' : `${tankCm.toFixed(1)} cm`}</p>
+          <p className="text-xs text-muted">{tankFull ? 'float switch: full' : 'not full'}</p>
+        </div>
+      </div>
+    </Card>
+  );
 }

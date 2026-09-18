@@ -288,9 +288,16 @@ function labelText(id: string, v: PlantView): string[] | null {
       return ['SUMP', v.sumpPump ? 'pumping' : 'pump off'];
     case 'chamber':
       return ['CHECK CHAMBER', `${num(v.chamberL)} / ${num(v.batchL)} L`, `pH ${fmtPh(v.ph)} · ${num(v.tds)} mg/L`];
-    case 'tank':
+    case 'tank': {
+      // Say what was actually gauged: centimetres from an ultrasonic head, or
+      // litres from a metered vessel. Never both, never a converted guess.
+      if (typeof v.tankDepthCm === 'number') {
+        const pct = typeof v.tankFraction === 'number' ? ` · ${Math.round(v.tankFraction * 100)}% full` : '';
+        return ['TREATMENT TANK', `${v.tankDepthCm.toFixed(1)} cm deep${pct}`, 'gauged by depth, not volume'];
+      }
       return ['TREATMENT TANK', `${num(v.tankL)} / ${num(v.tankCapL)} L`,
         v.tankL > 0 ? `pH ${fmtPh(v.tankPh)}${v.dosingPump ? ' · dosing' : ''}` : 'empty'];
+    }
     case 'drum':
       return ['NEUTRALISER', v.neutraliserPct === null ? '—' : `${Math.round(v.neutraliserPct)}%`];
     case 'V1':
@@ -616,7 +623,11 @@ function applyState(
 ) {
   // ---- levels ------------------------------------------------------------
   setLevel(b.chamberWater, v.chamberL / Math.max(1, v.batchL), CHAMBER_H, dt);
-  setLevel(b.tankWater, v.tankL / Math.max(1, v.tankCapL), TANK_H, dt);
+  // A depth-gauged tank reports how full it is directly; a metered one is a
+  // ratio of litres. Either way the vessel fills the same.
+  setLevel(b.tankWater,
+    typeof v.tankFraction === 'number' ? v.tankFraction : v.tankL / Math.max(1, v.tankCapL),
+    TANK_H, dt);
   setLevel(b.drumWater, (v.neutraliserPct ?? 0) / 100, DRUM_H, dt);
   // The two side chambers are pass-through, not metered: the controller
   // reports no litres for them, so they show water present while their gate is
