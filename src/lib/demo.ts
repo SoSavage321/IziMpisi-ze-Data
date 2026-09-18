@@ -449,6 +449,7 @@ class DemoStore {
       const todays = this.batches.filter((b) => b.device_id === d.id && new Date(b.started_at) >= today);
       const alarms = this.alarms.filter((a) => a.device_id === d.id && !a.cleared_at && a.severity !== 'info');
       const offline = Date.now() - Date.parse(d.last_seen) > 60_000;
+      const un = (field: string) => t?.unmeasured?.includes(field) ?? false;
 
       return {
         device_id: d.id, device_name: d.name, site_id: site.id, site_name: site.name,
@@ -457,9 +458,12 @@ class DemoStore {
         config_version: d.config_version, offline,
         state: offline ? null : t?.state ?? null,
         mode: t?.mode ?? 'AUTO', estop: t?.estop ?? false,
-        ph: t?.ph ?? null, tds: t?.tds ?? null,
-        neutraliser_pct: t?.neutraliser_pct ?? null,
-        tank_l: t?.tank_l ?? null, tank_cap_l: t?.tank_cap_l ?? 300,
+        // A device that does not carry a probe reports unknown, not a number.
+        ph: un('ph') ? null : t?.ph ?? null,
+        tds: un('tds') ? null : t?.tds ?? null,
+        neutraliser_pct: un('neutraliser_pct') ? null : t?.neutraliser_pct ?? null,
+        tank_l: un('tank_l') ? null : t?.tank_l ?? null,
+        tank_cap_l: t?.tank_cap_l ?? 300,
         v1: t?.v1 ?? false, v2: t?.v2 ?? false, v3: t?.v3 ?? false,
         siren: t?.siren ?? false, led: t?.led ?? 'off',
         active_alarms: alarms.length,

@@ -69,44 +69,89 @@ function bool(raw: Raw, names: string[]): boolean {
   return false;
 }
 
-/** Whatever the bench sent -> the Telemetry the dashboard renders. */
+/**
+ * Electrical conductivity to dissolved solids. The rig ships a conductivity
+ * cell, not a TDS meter, and the conventional conversion is EC in uS/cm times
+ * a factor between 0.5 and 0.7 depending on which salts dominate. 0.5 is the
+ * usual default and the conservative end for mine water. Override with
+ * VITE_PROTOTYPE_TDS_FACTOR if the rig is calibrated against a known sample.
+ */
+export const TDS_FACTOR = Number(import.meta.env.VITE_PROTOTYPE_TDS_FACTOR ?? 0.5);
+
+/**
+ * Whatever the bench sent -> the Telemetry the dashboard renders.
+ *
+ * The rig reports:
+ *   cond      conductivity in uS/cm      -> TDS, via TDS_FACTOR
+ *   valve     "RIVER" | "TREATMENT"      -> which gate is open
+ *   state     "PASS" and friends         -> the plant state
+ *   tankCm    depth in the tank          -> level only, no volume: see below
+ *   tankFull  float switch
+ *   alarm     buzzer
+ *   tempC     probe temperature
+ *   risk      the sketch's own 0..n score
+ *
+ * It has no pH probe and no reagent level sensor, so those two are marked
+ * unmeasured and the dashboard shows them as unknown. Putting a plausible
+ * number there would be inventing a reading on real hardware.
+ */
 export function toTelemetry(raw: Raw, now = Date.now()): Telemetry | null {
-  const ph = num(raw, ['ph', 'pH', 'PH', 'ph_value', 'phValue']);
-  const tds = num(raw, ['tds', 'TDS', 'tds_ppm', 'tdsPpm', 'tds_value', 'ec', 'EC']);
-  // A reading with neither probe in it is not a reading.
+  const cond = num(raw, ['cond', 'conductivity', 'ec', 'EC', 'uscm']);
+  const ph = num(raw, ['ph', 'pH', 'PH', 'ph_value']);
+  const tdsDirect = num(raw, ['tds', 'TDS', 'tds_ppm']);
+  const tds = tdsDirect ?? (cond === null ? null : Math.round(cond * TDS_FACTOR));
+  // Nothing measurable in this payload at all.
   if (ph === null && tds === null) return null;
 
-  const tsRaw = pick(raw, ['ts', 'timestamp', 'time', 'created_at', 'receivedAt']);
+  // The bench stamps local time with no offset, and the bench and this
+  // dashboard both sit in Johannesburg, so parsing it as local is correct.
+  const tsRaw = pick(raw, ['timestamp', 'ts', 'time', 'created_at', 'receivedAt']);
   let ts = new Date(now).toISOString();
   if (typeof tsRaw === 'string' && !Number.isNaN(Date.parse(tsRaw))) ts = new Date(tsRaw).toISOString();
   else if (typeof tsRaw === 'number') ts = new Date(tsRaw < 1e12 ? tsRaw * 1000 : tsRaw).toISOString();
 
-  const state = pick(raw, ['state', 'status', 'phase']);
+  const valve = String(pick(raw, ['valve']) ?? '').toUpperCase();
+  const toTreatment = valve.startsWith('TREAT');
+  const toRiver = valve.startsWith('RIV') || valve.startsWith('DAM');
+
+  const rawState = String(pick(raw, ['state', 'status', 'phase']) ?? '').toUpperCase();
+  // The rig's own words, translated into states this dashboard already draws.
+  let state = rawState || 'TEST';
+  if (toTreatment) state = 'DIVERT';
+  else if (toRiver && (rawState === 'PASS' || rawState === '')) state = 'DISCHARGE';
+  else if (rawState === 'PASS') state = 'DISCHARGE';
+  else if (rawState === 'AMD' || rawState === 'FAIL') state = 'DIVERT';
+
+  const unmeasured: string[] = [];
+  if (ph === null) unmeasured.push('ph');
+  if (num(raw, ['neutraliser_pct', 'neutraliserPct', 'reagent_pct']) === null) unmeasured.push('neutraliser_pct');
+  // tankCm is a depth, and without the tank's cross-section it cannot honestly
+  // become litres, so the volume stays unknown even though the level is known.
+  if (num(raw, ['tank_l', 'tankL']) === null) unmeasured.push('tank_l');
 
   return {
     ts,
-    // The bench rig measures continuously rather than running the batch
-    // machine, so TEST is the truthful default: it is testing water.
-    state: typeof state === 'string' && state ? state.toUpperCase() : 'TEST',
+    state,
     mode: 'AUTO',
     estop: bool(raw, ['estop', 'e_stop', 'emergency_stop']),
-    ph: ph ?? 7,
+    ph: ph ?? 7,                       // inert placeholder; listed in unmeasured
     tds: tds ?? 0,
-    chamber_l: num(raw, ['chamber_l', 'chamberL', 'volume_l', 'volume']) ?? 0,
+    chamber_l: num(raw, ['chamber_l', 'chamberL', 'volume_l']) ?? 0,
     tank_l: num(raw, ['tank_l', 'tankL']) ?? 0,
     tank_cap_l: num(raw, ['tank_cap_l', 'tankCapL']) ?? 300,
     tank_ph: num(raw, ['tank_ph', 'tankPh']) ?? (ph ?? 7),
     tank_tds: num(raw, ['tank_tds', 'tankTds']) ?? (tds ?? 0),
     neutraliser_pct: num(raw, ['neutraliser_pct', 'neutraliserPct', 'reagent_pct']) ?? 100,
-    v1: bool(raw, ['v1', 'V1', 'valve1', 'valve_1']),
-    v2: bool(raw, ['v2', 'V2', 'valve2', 'valve_2']),
-    v3: bool(raw, ['v3', 'V3', 'valve3', 'valve_3']),
+    v1: bool(raw, ['v1', 'V1', 'valve1']) || toRiver,
+    v2: bool(raw, ['v2', 'V2', 'valve2']) || toTreatment,
+    v3: bool(raw, ['v3', 'V3', 'valve3']),
     sump_pump: bool(raw, ['sump_pump', 'sumpPump', 'pump']),
     dosing_pump: bool(raw, ['dosing_pump', 'dosingPump', 'doser']),
-    siren: bool(raw, ['siren', 'buzzer', 'alarm']),
+    siren: bool(raw, ['alarm', 'siren', 'buzzer']),
     led: typeof pick(raw, ['led']) === 'string' ? String(pick(raw, ['led'])) : 'off',
     wifi_rssi: num(raw, ['wifi_rssi', 'rssi']) ?? -50,
-    uptime_s: num(raw, ['uptime_s', 'uptime', 'secondsSinceLastReading']) ?? 0,
+    uptime_s: num(raw, ['uptime_s', 'uptime']) ?? 0,
+    unmeasured,
   };
 }
 

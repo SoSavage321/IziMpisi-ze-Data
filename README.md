@@ -210,11 +210,32 @@ simulated controllers — those stay exactly as they were.
 VITE_PROTOTYPE_API=http://192.168.40.249:5000 npm run dev
 ```
 
-Field names are matched loosely (`ph`/`pH`, `tds`/`TDS`/`tds_ppm`, and one
-level of nesting under `reading`/`data`), so the sketch does not have to be
-rewritten to suit the dashboard. A reading with neither probe in it is
-discarded rather than shown as zero. Anything the rig does not report — valve
-positions, tank level — stays at its resting value instead of being invented.
+The rig reports conductivity, not pH:
+
+```json
+{"alarm":false,"cond":1011,"risk":0,"state":"PASS","tankCm":11.8,
+ "tankFull":false,"tempC":25.0,"timestamp":"2026-09-18T06:04:14","valve":"RIVER"}
+```
+
+| Field | Shown as |
+|---|---|
+| `cond` (uS/cm) | TDS in mg/L, via the conventional EC x 0.5 (`VITE_PROTOTYPE_TDS_FACTOR` to change it) |
+| `valve: RIVER` | V1 open, state *Discharging to river* |
+| `valve: TREATMENT` | V2 open, state *Diverting to tank* |
+| `alarm` | siren |
+| `timestamp` | stamped local with no offset, and both machines sit in Johannesburg, so it is parsed as local |
+
+**The rig carries no pH probe and no reagent level sensor.** Those two are
+marked unmeasured and the dashboard prints them as `—`. It would be easy to
+put a plausible number there, and wrong: this is real hardware, and the
+release rule is written on pH. On this node the RIVER/TREATMENT decision is
+being made on conductivity alone. `tankCm` is a depth, and without the tank's
+cross-section it cannot honestly become litres, so the level is known and the
+volume is not.
+
+The prototype is also left out of the seven-day history seeder, so it carries
+no invented batches, litres or pass rate. It starts empty and fills from what
+it actually reports.
 
 Two things have to be true or the readings will not arrive:
 

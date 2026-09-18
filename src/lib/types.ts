@@ -81,6 +81,12 @@ export interface Telemetry {
   led: string;
   wifi_rssi: number;
   uptime_s: number;
+  /**
+   * Fields this device does not physically measure. The values above still
+   * carry a number because the control logic needs one, but anything listed
+   * here must be shown as unknown rather than reported as a reading.
+   */
+  unmeasured?: string[];
 }
 
 export interface Batch {
