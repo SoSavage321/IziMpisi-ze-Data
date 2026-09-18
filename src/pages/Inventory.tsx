@@ -19,7 +19,10 @@ export default function Inventory() {
   const { data: items, isLoading } = useInventory();
   const { data: movements } = useMovements();
   const { data: fleet } = useFleet();
-  const { data: cycles } = useCycles({ from: new Date(Date.now() - 7 * 86400_000).toISOString() });
+  // Stable across renders: an inline Date.now() would change the query key
+  // on every live tick and keep the consumption figures reloading.
+  const cyclesFrom = useMemo(() => new Date(Date.now() - 7 * 86400_000).toISOString(), []);
+  const { data: cycles } = useCycles({ from: cyclesFrom });
   const { session, can } = useAuth();
   const { push } = useToast();
   const qc = useQueryClient();

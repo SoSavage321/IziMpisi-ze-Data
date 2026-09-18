@@ -27,7 +27,10 @@ export default function Analytics() {
   const [deviceId, setDeviceId] = useState('');
   const [days, setDays] = useState(7);
 
-  const from = new Date(Date.now() - days * 86400_000).toISOString();
+  // Date.now() runs on every render, so an inline window would mint a fresh
+  // query key each time and the charts would blank out between fetches while
+  // the live tick re-renders us. Recompute only when the range changes.
+  const from = useMemo(() => new Date(Date.now() - days * 86400_000).toISOString(), [days]);
   const { data: batches, isLoading } = useBatches({ deviceId: deviceId || undefined, from, limit: 5000 });
   const { data: cycles } = useCycles({ deviceId: deviceId || undefined, from });
   const { data: inventory } = useInventory();
