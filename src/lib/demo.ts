@@ -13,6 +13,7 @@
 import { Controller } from '@shared/controller.ts';
 import { DEFAULT_CONFIG } from '@shared/types.ts';
 import { evaluateAlarms, reconcile, type ExistingAlarm } from '@shared/alarms.ts';
+import { PROTOTYPE_DEVICE_ID, latestReading, readingHistory } from './prototype.ts';
 import { Plant } from '../../simulator/plant.ts';
 import type {
   Alarm, AuditRow, Batch, Command, DeviceConfig, DeviceEventRow, FleetRow,
@@ -65,6 +66,8 @@ interface DemoDevice {
   telemetry: Telemetry[];
   clock: number;
   live: boolean;      // site-2 device 3 is deliberately offline
+  /** Real bench hardware: its telemetry is polled, never simulated. */
+  proto?: boolean;
 }
 
 class DemoStore {
@@ -103,10 +106,58 @@ class DemoStore {
     if (this.timer !== null) return;
     // 500 ms of simulated time per 500 ms of wall time: real-time plant.
     this.timer = window.setInterval(() => { this.tick(500); this.emit(); }, 500);
+    this.startPrototypePolling();
   }
 
   private stop() {
     if (this.timer !== null) { window.clearInterval(this.timer); this.timer = null; }
+    if (this.protoTimer !== null) { window.clearInterval(this.protoTimer); this.protoTimer = null; }
+  }
+
+  // ----------------------------------------------------- bench prototype ---
+
+  private protoTimer: number | null = null;
+  private protoBackfilled = false;
+
+  /**
+   * Poll the bench API. Kept apart from tick() on purpose: tick() is
+   * synchronous and must stay that way, and a bench that is switched off must
+   * not be able to stall the simulated devices.
+   */
+  private startPrototypePolling() {
+    if (this.protoTimer !== null) return;
+    const poll = () => { void this.pollPrototype(); };
+    poll();
+    this.protoTimer = window.setInterval(poll, 2000);
+  }
+
+  private async pollPrototype() {
+    const device = this.devices.find((d) => d.proto);
+    if (!device) return;
+
+    // One backfill so the charts open with a line rather than a single dot.
+    if (!this.protoBackfilled) {
+      this.protoBackfilled = true;
+      const past = await readingHistory(200);
+      if (past.length) {
+        device.telemetry = past as Telemetry[];
+        device.last_seen = past[past.length - 1].ts;
+      }
+    }
+
+    const sample = await latestReading();
+    // No sample means off, unreachable or CORS-blocked. Leave last_seen where
+    // it is and the offline rule will say so on its own.
+    if (!sample) return;
+
+    const previous = device.telemetry[device.telemetry.length - 1];
+    if (previous && previous.ts === sample.ts) return;   // same reading again
+
+    device.telemetry.push(sample);
+    if (device.telemetry.length > 2400) device.telemetry.shift();
+    device.last_seen = sample.ts;
+    this.runAlarms(device, Date.now());
+    this.emit();
   }
 
   // --------------------------------------------------------------- build ---
@@ -117,6 +168,9 @@ class DemoStore {
       { id: 'dev-1', site: 'site-1', name: 'WG-01 sump 3 controller', scenario: 'normal' as const, live: true, flow: false },
       { id: 'dev-2', site: 'site-1', name: 'WG-02 settling pond', scenario: 'acid_event' as const, live: true, flow: true },
       { id: 'dev-3', site: 'site-2', name: 'WG-03 north pit', scenario: 'neutraliser_empty' as const, live: false, flow: false },
+      // Real hardware on the bench. Same row shape as the rest so every screen
+      // treats it as an ordinary device; only its telemetry source differs.
+      { id: PROTOTYPE_DEVICE_ID, site: 'site-1', name: 'AcidShield prototype (live bench)', scenario: 'normal' as const, live: true, flow: false, proto: true },
     ];
 
     for (const [n, spec] of specs.entries()) {
@@ -124,11 +178,15 @@ class DemoStore {
       const plant = new Plant({ scenario: spec.scenario, seed: 7 + n * 31 });
       if (spec.scenario === 'neutraliser_empty') plant.i.neutraliserPct = 0;
 
+      const proto = 'proto' in spec && spec.proto === true;
       this.devices.push({
         id: spec.id, site_id: spec.site, name: spec.name,
-        firmware_version: '1.0.0', flow_sensor: spec.flow, config_version: n === 0 ? 2 : 1,
-        last_seen: spec.live ? iso(now) : iso(now - 7 * 60_000),
-        controller, plant, telemetry: [], clock: now, live: spec.live,
+        firmware_version: proto ? 'bench' : '1.0.0',
+        flow_sensor: spec.flow, config_version: n === 0 ? 2 : 1,
+        // The prototype starts stale on purpose: until the bench answers it is
+        // offline, rather than claiming a reading it has not made.
+        last_seen: proto || !spec.live ? iso(now - 7 * 60_000) : iso(now),
+        controller, plant, telemetry: [], clock: now, live: spec.live, proto,
       });
 
       this.configs.push({
@@ -167,6 +225,11 @@ class DemoStore {
   private buildHistory(now: number) {
     const rand = rng(20260917);
     for (const device of this.devices) {
+      // The bench rig has no seven-day past. Inventing batches, litres to the
+      // river and a pass rate for real hardware would be the one dishonest
+      // thing on the screen, so it starts with an empty record and fills up
+      // from what it actually reports.
+      if (device.proto) continue;
       let batchNo = 0;
       let cycleNo = 0;
       const start = now - 7 * 86400_000;
@@ -286,6 +349,9 @@ class DemoStore {
     const now = Date.now();
     for (const device of this.devices) {
       if (!device.live) continue;
+      // The bench rig reports what it actually measured; stepping a model on
+      // top of it would overwrite real readings with invented ones.
+      if (device.proto) { this.runAlarms(device, now); continue; }
 
       device.plant.step(dtMs / 1000, device.controller.out, device.controller.tankL, device.controller.chamberL);
       device.controller.tick(dtMs, device.plant.i);

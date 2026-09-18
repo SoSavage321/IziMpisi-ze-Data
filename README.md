@@ -198,6 +198,41 @@ stale, so the two cannot drift.
 
 ---
 
+## The bench prototype on the dashboard
+
+The Arduino rig reports over serial to a small Flask process on the bench PC,
+which serves it at `/api/readings/latest`, `/api/readings/history` and
+`/api/health`. The dashboard polls that every two seconds and shows it as a
+fourth device, **AcidShield prototype (live bench)**, beside the three
+simulated controllers — those stay exactly as they were.
+
+```bash
+VITE_PROTOTYPE_API=http://192.168.40.249:5000 npm run dev
+```
+
+Field names are matched loosely (`ph`/`pH`, `tds`/`TDS`/`tds_ppm`, and one
+level of nesting under `reading`/`data`), so the sketch does not have to be
+rewritten to suit the dashboard. A reading with neither probe in it is
+discarded rather than shown as zero. Anything the rig does not report — valve
+positions, tank level — stays at its resting value instead of being invented.
+
+Two things have to be true or the readings will not arrive:
+
+| | Why | Fix |
+|---|---|---|
+| **CORS on the Flask side** | the browser drops the response before the dashboard sees it | `pip install flask-cors`, then `from flask_cors import CORS; CORS(app)` |
+| **The dashboard served over HTTP** | an HTTPS page may not call a plain-HTTP LAN address — the browser blocks it outright | use `npm run dev`, not the deployed site |
+
+That second one is worth saying plainly: **the prototype cannot appear on
+https://izimpisi-ze-data.web.app**. It is not a bug in the wiring, it is the
+mixed-content rule, and the only ways round it are to serve the bench API over
+HTTPS or to tunnel it. On the deployed site the device shows as offline.
+
+When the bench is unreachable the fetch fails quietly, `last_seen` goes stale
+and the existing offline rule raises the alarm on its own.
+
+---
+
 ## The node simulation
 
 `/simulation` is the explainer page: one mine-water node you can push around. Trigger an acid slug, an
